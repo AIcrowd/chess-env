@@ -21,7 +21,7 @@ class RandomAgent(ChessAgent):
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> tuple[chess.Move, str | None]:
+    ) -> tuple[chess.Move | None, str | None]:
         """
         Choose a random move from the legal moves.
         
@@ -33,7 +33,7 @@ class RandomAgent(ChessAgent):
             
         Returns:
             Tuple of (chosen_move, optional_comment)
-            - chosen_move: A randomly chosen legal move
+            - chosen_move: A randomly chosen legal move, or None to resign
             - optional_comment: None (random moves don't need explanation)
             
         Raises:

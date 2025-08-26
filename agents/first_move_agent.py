@@ -20,7 +20,7 @@ class FirstMoveAgent(ChessAgent):
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> tuple[chess.Move, str | None]:
+    ) -> tuple[chess.Move | None, str | None]:
         """
         Choose the first available legal move.
         
@@ -32,7 +32,7 @@ class FirstMoveAgent(ChessAgent):
             
         Returns:
             Tuple of (chosen_move, optional_comment)
-            - chosen_move: The first legal move from the list
+            - chosen_move: The first legal move from the list, or None to resign
             - optional_comment: None (first move strategy is self-explanatory)
             
         Raises:

@@ -18,7 +18,7 @@ class ChessAgent(ABC):
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> tuple[chess.Move, str | None]:
+    ) -> tuple[chess.Move | None, str | None]:
         """
         Choose a move from the given legal moves.
         
@@ -30,7 +30,7 @@ class ChessAgent(ABC):
             
         Returns:
             Tuple of (chosen_move, optional_comment)
-            - chosen_move: The chess move to play
-            - optional_comment: Optional comment explaining the move (can be None)
+            - chosen_move: The chosen chess move, or None to resign
+            - optional_comment: Optional comment explaining the move or resignation reason
         """
         pass

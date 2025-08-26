@@ -173,6 +173,11 @@ class ChessEnvironment:
                 move = move_result
                 comment = None
 
+            # Check for resignation
+            if move is None:
+                print(f"❌ {side} chose to resign")
+                return None
+
             # Check time limit
             if move_time > self.time_limit:
                 print(
@@ -230,8 +235,11 @@ class ChessEnvironment:
             # Get and play move
             move = self.play_agent_move(current_agent, current_side)
             if move is None:
-                # Agent failed to provide a valid move
-                result = "Black wins" if current_side == "White" else "White wins"
+                # Agent failed to provide a valid move or resigned
+                if current_side == "White":
+                    result = "Black wins (White resigned)"
+                else:
+                    result = "White wins (Black resigned)"
                 if verbose:
                     print(f"❌ {current_side} failed to provide a valid move. {result}")
                 break
@@ -258,9 +266,10 @@ class ChessEnvironment:
             move_count += 1
 
         # Game ended
-        result = self.get_game_result()
-        if result is None:
-            result = "Draw (max moves reached)"
+        if 'result' not in locals():
+            result = self.get_game_result()
+            if result is None:
+                result = "Draw (max moves reached)"
 
         if verbose:
             print(f"\n🎯 Game Over: {result}")

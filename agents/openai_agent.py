@@ -382,7 +382,7 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         Parse the model's response to extract a valid move.
         
         This method is super strict: the model must respond with a valid UCI move
-        in the required <uci_move></uci_move> tags, otherwise it's treated as resignation.
+        in the required <uci_move></uci_move> tags.
         
         Args:
             response: Raw response from the model
@@ -393,7 +393,7 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
             The chosen chess move
             
         Raises:
-            ValueError: If no valid move can be parsed (treated as resignation)
+            ValueError: If no valid move can be parsed
         """
         # Clean the response
         response = response.strip()
@@ -403,9 +403,9 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         uci_pattern = r'<uci_move>(.*?)</uci_move>'
         uci_matches = re.findall(uci_pattern, response, re.IGNORECASE)
         
-        # If no UCI tags found, treat as resignation
+        # If no UCI tags found, raise error (not resignation)
         if not uci_matches:
-            raise ValueError("Model did not respond with required UCI move tags - treating as resignation")
+            raise ValueError("Model did not respond with required UCI move tags")
         
         # Get the first UCI move from tags
         uci_move = uci_matches[0].strip()
@@ -418,13 +418,13 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         try:
             move = chess.Move.from_uci(uci_move)
         except Exception as e:
-            # Invalid UCI format - treat as resignation
-            raise ValueError(f"Model provided invalid UCI format '{uci_move}' - treating as resignation")
+            # Invalid UCI format - raise error (not resignation)
+            raise ValueError(f"Model provided invalid UCI format '{uci_move}'")
         
         # Check if the move is legal
         if move not in legal_moves:
-            # Illegal move - treat as resignation
-            raise ValueError(f"Model provided illegal move '{uci_move}' - treating as resignation")
+            # Illegal move - raise error (not resignation)
+            raise ValueError(f"Model provided illegal move '{uci_move}'")
         
         # Valid UCI move found
         return move
@@ -448,7 +448,7 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> tuple[chess.Move, str | None]:
+    ) -> tuple[chess.Move | None, str | None]:
         """
         Choose the best move using OpenAI's API.
         
@@ -460,11 +460,11 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
             
         Returns:
             Tuple of (chosen_move, optional_comment)
-            - chosen_move: The chosen chess move
-            - optional_comment: Comment from the AI model explaining the move
+            - chosen_move: The chosen chess move, or None to resign
+            - optional_comment: Comment from the AI model explaining the move or resignation
             
         Raises:
-            ValueError: If no legal moves are available or parsing fails
+            ValueError: If no legal moves are available
         """
         if not legal_moves:
             raise ValueError("No legal moves available")
@@ -478,7 +478,7 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         except Exception as e:
             # If API call fails, fall back to first legal move
             print(f"Warning: OpenAI API call failed: {e}, using first legal move")
-            return legal_moves[0], f"Fallback move - OpenAI API failed: {e}"
+            return legal_moves[0], f"FALLBACK MOVE - OpenAI API failed: {e}"
         
         # Parse the response to get the move
         try:
@@ -487,20 +487,21 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
             comment = self._extract_comment(response)
             return move, comment
         except ValueError as e:
-            # Check if the model chose to resign
+            # Check if the model explicitly chose to resign
             if "resign" in str(e).lower():
-                if self.fallback_behavior == "resign":
-                    raise ValueError("Model chose to resign the game")
-                else:
-                    print("Warning: Model chose to resign, but fallback behavior is 'random_move'. Using first legal move.")
-                    return legal_moves[0], f"Fallback move - Model chose to resign. Full API response: {response}"
+                # Model explicitly chose to resign - always respect this choice
+                return None, f"RESIGNATION - Model chose to resign. Full API response: {response}"
             
-            # If parsing fails, handle according to fallback behavior
+            # If parsing fails due to invalid/unparseable moves, handle according to fallback behavior
             if self.fallback_behavior == "resign":
-                raise ValueError(f"Could not parse valid move: {e}")
+                # Parsing failed and fallback behavior is resign
+                return None, f"RESIGNATION - Unable to parse valid move: {e}. Full API response: {response}"
             else:
-                print(f"Warning: Could not parse move from response: {e}, using first legal move")
-                return legal_moves[0], f"Fallback move - Parsing failed: {e}. Full API response: {response}"
+                # Parsing failed but fallback behavior is random_move - select a random legal move
+                import random
+                random_move = random.choice(legal_moves)
+                print(f"Warning: Could not parse move from response: {e}, using random legal move")
+                return random_move, f"RANDOM MOVE - Unable to parse move: {e}. Full API response: {response}"
     
     def update_prompt_template(self, new_template: str):
         """

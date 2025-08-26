@@ -29,7 +29,7 @@ class TemplateAgent(ChessAgent):
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> tuple[chess.Move, str | None]:
+    ) -> tuple[chess.Move | None, str | None]:
         """
         Choose a move based on your custom strategy.
         
@@ -47,8 +47,8 @@ class TemplateAgent(ChessAgent):
             
         Returns:
             Tuple of (chosen_move, optional_comment)
-            - chosen_move: The chosen chess move
-            - optional_comment: Optional comment explaining the move strategy
+            - chosen_move: The chosen chess move, or None to resign
+            - optional_comment: Optional comment explaining the move strategy or resignation
             
         Example strategies you could implement:
         - Material counting (evaluate piece values)
