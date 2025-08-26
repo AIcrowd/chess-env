@@ -120,7 +120,7 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
     
     stockfish_agent = StockfishAgent(
         skill_level=1,        # Level 1 (very weak)
-        depth=5,              # Low depth for faster play
+        depth=2,              # Low depth for faster play
         time_limit_ms=1000    # 1 second per move
     )
     
