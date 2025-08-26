@@ -1,6 +1,20 @@
 #!/usr/bin/env python3
 """
-Example script demonstrating the chess environment usage.
+Comprehensive demonstration of all chess environment features
+
+This script demonstrates ALL available features of the chess environment:
+- Basic environment usage and game play
+- Multiple games and statistics
+- Custom starting positions (FEN)
+- PGN export with metadata
+- Agent analysis and comparison
+- Stockfish agent functionality
+- OpenAI agent functionality
+- Chess board rendering options
+- Enhanced game termination detection
+- Clean game display
+
+For a specific gameplay example, see example_game.py
 """
 
 import os
@@ -43,6 +57,10 @@ def demonstrate_basic_usage():
     print(f"Result: {result['result']}")
     print(f"Moves played: {result['moves_played']}")
     print(f"Game over reason: {result['game_over_reason']}")
+    
+    # Show enhanced termination information if available
+    if result['game_over_reason'] != "max_moves":
+        print(f"🏁 Termination details: {result['game_over_reason']}")
     
     return result
 
@@ -698,6 +716,60 @@ def demonstrate_clean_game():
     return result
 
 
+def demonstrate_game_termination():
+    """Demonstrate the enhanced game termination detection."""
+    print("\n=== Game Termination Detection Demo ===\n")
+    
+    # Test different termination scenarios
+    print("1. Testing checkmate detection...")
+    
+    # Create a position that leads to quick checkmate
+    checkmate_fen = "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3"
+    env = ChessEnvironment(FirstMoveAgent(), FirstMoveAgent(), max_moves=5, initial_fen=checkmate_fen)
+    
+    print("Starting from Fool's Mate position:")
+    print(env.display_board())
+    print()
+    
+    # Play the game
+    result = env.play_game(verbose=False)
+    print(f"Game result: {result['result']}")
+    print(f"Game over reason: {result['game_over_reason']}")
+    print(f"Moves played: {result['moves_played']}")
+    print()
+    
+    # Test stalemate detection
+    print("2. Testing stalemate detection...")
+    stalemate_fen = "k7/8/1K6/8/8/8/8/8 w - - 0 1"
+    env2 = ChessEnvironment(FirstMoveAgent(), FirstMoveAgent(), max_moves=3, initial_fen=stalemate_fen)
+    
+    print("Starting from stalemate position:")
+    print(env2.display_board())
+    print()
+    
+    result2 = env2.play_game(verbose=False)
+    print(f"Game result: {result2['result']}")
+    print(f"Game over reason: {result2['game_over_reason']}")
+    print(f"Moves played: {result2['moves_played']}")
+    print()
+    
+    # Test draw by insufficient material
+    print("3. Testing draw by insufficient material...")
+    draw_fen = "8/8/8/8/8/8/8/4K3 w - - 0 1"
+    env3 = ChessEnvironment(FirstMoveAgent(), FirstMoveAgent(), max_moves=2, initial_fen=draw_fen)
+    
+    print("Starting from King vs King position:")
+    print(env3.display_board())
+    print()
+    
+    result3 = env3.play_game(verbose=False)
+    print(f"Game result: {result3['result']}")
+    print(f"Game over reason: {result3['game_over_reason']}")
+    print(f"Moves played: {result3['moves_played']}")
+    
+    return [result, result2, result3]
+
+
 def main():
     """Run all demonstrations."""
     print("Chess Environment Demonstrations")
@@ -706,6 +778,9 @@ def main():
     try:
         # Clean game demo (most important)
         result1 = demonstrate_clean_game()
+        
+        # Game termination detection demo
+        termination_results = demonstrate_game_termination()
         
         # Basic usage
         result2 = demonstrate_basic_usage()

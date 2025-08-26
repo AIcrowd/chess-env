@@ -176,14 +176,33 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         self._validate_prompt_template()
     
     def _validate_prompt_template(self):
-        """Validate that the prompt template contains required placeholders."""
-        required_placeholders = ["{FEN}", "{board_utf}", "{legal_moves_uci}", "{legal_moves_san}", "{move_history_uci}", "{move_history_san}", "{side_to_move}"]
-        for placeholder in required_placeholders:
-            if placeholder not in self.prompt_template:
-                raise ValueError(
-                    f"Prompt template must contain {placeholder} placeholder. "
-                    f"Current template: {self.prompt_template}"
-                )
+        """Validate that the prompt template is valid and contains at least basic placeholders."""
+        # Check for basic template validity
+        if not self.prompt_template or not isinstance(self.prompt_template, str):
+            raise ValueError("Prompt template must be a non-empty string")
+        
+        # Check for at least one placeholder to ensure it's a template
+        if "{" not in self.prompt_template or "}" not in self.prompt_template:
+            raise ValueError("Prompt template must contain at least one placeholder (e.g., {FEN})")
+        
+        # Check for balanced braces
+        open_braces = self.prompt_template.count("{")
+        close_braces = self.prompt_template.count("}")
+        if open_braces != close_braces:
+            raise ValueError("Prompt template has unbalanced braces - check for missing { or }")
+        
+        # Optional: Check for common issues with placeholder syntax
+        import re
+        placeholder_pattern = r'\{[^}]*\}'
+        placeholders = re.findall(placeholder_pattern, self.prompt_template)
+        
+        # Warn about potentially problematic placeholders (but don't fail)
+        for placeholder in placeholders:
+            if placeholder in ["{}", "{ }", "{  }"]:
+                print(f"Warning: Empty placeholder '{placeholder}' found in template")
+        
+        # Note: We don't require specific placeholders anymore - users can create custom templates
+        # with only the variables they need
     
 
     
@@ -257,17 +276,35 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
             move_history_uci_str = "(no moves yet)"
             move_history_san_str = "(no moves yet)"
         
-        # Format the prompt
-        prompt = self.prompt_template.format(
-            board_utf=board_utf,
-            FEN=fen,
-            last_move=last_move_desc,
-            legal_moves_uci=legal_moves_uci_str,
-            legal_moves_san=legal_moves_san_str,
-            move_history_uci=move_history_uci_str,
-            move_history_san=move_history_san_str,
-            side_to_move=side_to_move
-        )
+        # Format the prompt safely, handling missing placeholders
+        try:
+            prompt = self.prompt_template.format(
+                board_utf=board_utf,
+                FEN=fen,
+                last_move=last_move_desc,
+                legal_moves_uci=legal_moves_uci_str,
+                legal_moves_san=legal_moves_san_str,
+                move_history_uci=move_history_uci_str,
+                move_history_san=move_history_san_str,
+                side_to_move=side_to_move
+            )
+        except KeyError as e:
+            # Handle missing placeholders gracefully
+            missing_key = str(e).strip("'")
+            print(f"Warning: Prompt template references placeholder '{missing_key}' that is not available")
+            print("Available placeholders: board_utf, FEN, last_move, legal_moves_uci, legal_moves_san, move_history_uci, move_history_san, side_to_move")
+            print("Consider updating your template or using the default template")
+            
+            # Fall back to a minimal template that should always work
+            fallback_template = """You are playing chess. Choose the best move from the available legal moves.
+
+Legal moves: {legal_moves_uci}
+
+Respond with your move in UCI notation wrapped in <uci_move></uci_move> tags.
+
+Example: <uci_move>e2e4</uci_move>"""
+            
+            prompt = fallback_template.format(legal_moves_uci=legal_moves_uci_str)
         
         return prompt
     
@@ -507,8 +544,29 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         """
         Update the prompt template.
         
+        You can create custom templates with any combination of available placeholders:
+        - {board_utf}: Visual board representation with Unicode pieces
+        - {FEN}: FEN notation of the current position
+        - {side_to_move}: Which side is to move ('White' or 'Black')
+        - {legal_moves_uci}: Available moves in UCI notation
+        - {legal_moves_san}: Available moves in SAN notation
+        - {move_history_uci}: Game history in UCI notation
+        - {move_history_san}: Game history in SAN notation
+        - {last_move}: Description of the last move played
+        
+        Examples of custom templates:
+        
+        # Minimal template (only legal moves)
+        "Choose the best move from: {legal_moves_uci}. Respond with <uci_move>move</uci_move>"
+        
+        # Position-focused template
+        "Position: {FEN}\nYour turn: {side_to_move}\nLegal moves: {legal_moves_san}\nChoose: <uci_move>move</uci_move>"
+        
+        # Full-featured template (like the default)
+        "Board:\n{board_utf}\nYour turn: {side_to_move}\nLegal moves: {legal_moves_uci}\nChoose: <uci_move>move</uci_move>"
+        
         Args:
-            new_template: New prompt template string
+            new_template: New prompt template string with desired placeholders
         """
         self.prompt_template = new_template
         self._validate_prompt_template()

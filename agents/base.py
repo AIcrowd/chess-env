@@ -3,7 +3,7 @@ Base chess agent abstract class.
 """
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Union, Tuple
 
 import chess
 
@@ -18,7 +18,7 @@ class ChessAgent(ABC):
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> tuple[chess.Move | None, str | None]:
+    ) -> Tuple[Union[chess.Move, None], Union[str, None]]:
         """
         Choose a move from the given legal moves.
         

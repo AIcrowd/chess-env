@@ -124,6 +124,26 @@ class ChessEnvironment:
                 return "Draw"
             else:
                 return "Draw"
+    
+    def get_game_termination_reason(self) -> str:
+        """Get the specific reason why the game ended."""
+        if not self.is_game_over():
+            return "Game not over"
+        
+        if self.board.is_checkmate():
+            return "Checkmate"
+        elif self.board.is_stalemate():
+            return "Stalemate"
+        elif self.board.is_insufficient_material():
+            return "Insufficient material"
+        elif self.board.is_fifty_moves():
+            return "Fifty-move rule"
+        elif self.board.is_repetition():
+            return "Threefold repetition"
+        elif self.board.is_variant_draw():
+            return "Variant draw"
+        else:
+            return "Unknown"
 
     def play_move(self, move: chess.Move, comment: str | None = None) -> bool:
         """
@@ -274,6 +294,17 @@ class ChessEnvironment:
         if verbose:
             print(f"\n🎯 Game Over: {result}")
             print(f"📊 Total moves: {move_count}")
+            
+            # Show termination reason if game ended normally
+            if self.is_game_over():
+                termination_reason = self.get_game_termination_reason()
+                print(f"🏁 Termination: {termination_reason}")
+            
+            # Show final board position
+            print(f"\n📋 Final Position:")
+            self.renderer.render_board(self.board, output_mode="clean")
+            print()
+            
             print(f"📝 Move history: {' '.join(self.move_history)}")
 
         # Compile results
@@ -286,7 +317,7 @@ class ChessEnvironment:
             "white_agent": self.agent1.__class__.__name__,
             "black_agent": self.agent2.__class__.__name__,
             "game_over_reason": (
-                "max_moves" if move_count >= self.max_moves else "normal"
+                self.get_game_termination_reason() if self.is_game_over() else "max_moves"
             ),
         }
 
@@ -325,10 +356,16 @@ class ChessEnvironment:
             '[Event "Chess Game"]',
             f'[White "{self.agent1.__class__.__name__}"]',
             f'[Black "{self.agent2.__class__.__name__}"]',
-            '[Result "*"]',
+            f'[Result "{self._get_pgn_result()}"]',
             "",
             " ".join(san_moves),
         ]
+        
+        # Add final result if game is over
+        if self.is_game_over():
+            result = self._get_pgn_result()
+            if result != "*":
+                pgn_lines.append(f" {result}")
         
         return "\n".join(pgn_lines)
 
@@ -425,6 +462,12 @@ class ChessEnvironment:
         pgn_lines.append("")
         pgn_lines.append(" ".join(san_moves))
         
+        # Add final result if game is over
+        if self.is_game_over():
+            result = self._get_pgn_result()
+            if result != "*":
+                pgn_lines.append(f" {result}")
+        
         return "\n".join(pgn_lines)
     
     def _get_current_date(self) -> str:
@@ -453,13 +496,19 @@ class ChessEnvironment:
         if not self.is_game_over():
             return "unterminated"
         
-        result = self.get_game_result()
-        if "checkmate" in result.lower():
+        termination_reason = self.get_game_termination_reason()
+        if termination_reason == "Checkmate":
             return "checkmate"
-        elif "stalemate" in result.lower():
+        elif termination_reason == "Stalemate":
             return "stalemate"
-        elif "draw" in result.lower():
-            return "draw"
+        elif termination_reason == "Insufficient material":
+            return "insufficient material"
+        elif termination_reason == "Fifty-move rule":
+            return "fifty-move rule"
+        elif termination_reason == "Threefold repetition":
+            return "repetition"
+        elif termination_reason == "Variant draw":
+            return "variant draw"
         else:
             return "normal"
     

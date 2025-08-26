@@ -4,7 +4,7 @@ First move chess agent implementation.
 This agent always chooses the first available legal move.
 """
 
-from typing import List
+from typing import List, Tuple, Union
 
 import chess
 
@@ -20,7 +20,7 @@ class FirstMoveAgent(ChessAgent):
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> tuple[chess.Move | None, str | None]:
+    ) -> Tuple[Union[chess.Move, None], Union[str, None]]:
         """
         Choose the first available legal move.
         
