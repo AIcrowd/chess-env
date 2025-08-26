@@ -429,30 +429,18 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         # Valid UCI move found
         return move
     
-    def _extract_comment(self, response: str) -> str | None:
+    def _extract_comment(self, response: str) -> str:
         """
-        Extract a comment from the model's response.
+        Extract the full comment from the model's response.
         
         Args:
             response: Raw response from the model
             
         Returns:
-            Comment string if found, None otherwise
+            Full response as comment string
         """
-        # Clean the response
-        response = response.strip()
-        
-        # Look for comments outside of UCI tags
-        # Remove the UCI move tags to get the comment
-        import re
-        uci_pattern = r'<uci_move>(.*?)</uci_move>'
-        response_without_tags = re.sub(uci_pattern, '', response, flags=re.IGNORECASE)
-        
-        # Clean up the remaining text
-        comment = response_without_tags.strip()
-        
-        # Return comment if it's not empty, otherwise None
-        return comment if comment else None
+        # Return the full response as the comment
+        return response.strip()
     
     def choose_move(
         self,
@@ -495,7 +483,7 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         # Parse the response to get the move
         try:
             move = self._parse_move(response, legal_moves, board)
-            # Extract comment from the response if available
+            # Use the full API response as the comment
             comment = self._extract_comment(response)
             return move, comment
         except ValueError as e:
@@ -505,14 +493,14 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
                     raise ValueError("Model chose to resign the game")
                 else:
                     print("Warning: Model chose to resign, but fallback behavior is 'random_move'. Using first legal move.")
-                    return legal_moves[0], "Fallback move - Model chose to resign"
+                    return legal_moves[0], f"Fallback move - Model chose to resign. Full API response: {response}"
             
             # If parsing fails, handle according to fallback behavior
             if self.fallback_behavior == "resign":
                 raise ValueError(f"Could not parse valid move: {e}")
             else:
                 print(f"Warning: Could not parse move from response: {e}, using first legal move")
-                return legal_moves[0], f"Fallback move - Parsing failed: {e}"
+                return legal_moves[0], f"Fallback move - Parsing failed: {e}. Full API response: {response}"
     
     def update_prompt_template(self, new_template: str):
         """
