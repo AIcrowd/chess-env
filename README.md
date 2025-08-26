@@ -13,6 +13,13 @@ A Python-based chess environment for running games between AI agents, built acco
 - **Built-in validation** and error handling
 - **Test suite** for safe development and updates
 
+## Requirements
+
+- Python 3.8+
+- `python-chess` - Chess board representation and game logic
+- `Chessnut` - Chess engine integration
+- `rich` - Enhanced terminal rendering with colors and styling (optional, falls back to plain text)
+
 ## Installation
 
 1. **Create and Activate the chess conda environment:**
@@ -89,6 +96,69 @@ success = env.export_pgn_file("simple_game", include_metadata=False)
 - **Custom positions**: Preserves initial FEN for non-standard starting positions
 - **Standard format**: Compatible with chess analysis software (Lichess, Chess.com, etc.)
 - **Error handling**: Returns success/failure status with informative error messages
+
+### Visual Chess Board Display
+
+The environment includes a powerful text-based chess board renderer using Unicode chess pieces:
+
+```python
+# Display the current board
+print(env.display_board())
+
+# Display with last move highlighted
+print(env.display_board(highlight_last_move=True))
+
+# Display complete game state
+print(env.display_game_state())
+
+# Display position analysis
+print(env.display_position_analysis())
+
+# Display a sequence of moves
+moves = [chess.Move.from_uci("e2e4"), chess.Move.from_uci("e7e5")]
+print(env.display_move_sequence(moves))
+
+# Configure renderer options
+env.set_renderer_options(
+    show_coordinates=True,      # Show file/rank coordinates
+    show_move_numbers=False,    # Hide move numbers
+    empty_square_char="·",      # Use dots for empty squares
+    use_rich=True               # Enable rich CLI styling
+)
+```
+
+**Rendering Features:**
+- **Unicode chess pieces**: Beautiful, readable piece symbols (♔♕♖♗♘♙ for White, ♚♛♜♝♞♟ for Black)
+- **Empty square visualization**: Clear representation of empty squares using configurable characters (·, ., -, etc.)
+- **Coordinate system**: File (a-h) and rank (1-8) coordinates for easy navigation
+- **Move highlighting**: Last move is highlighted with brackets `[♙]`
+- **Configurable display**: Toggle coordinates, move numbers, empty square characters, and other options
+- **Rich CLI support**: Enhanced rendering with colors, alternating square backgrounds, and professional styling
+- **Position analysis**: Material count, legal moves, and sample moves
+- **Move sequences**: Step-by-step visualization of move sequences
+- **Custom positions**: Works with any FEN position
+
+**Rendering Configuration:**
+- **Empty Square Characters**: Choose from `·` (dot), `.` (period), `-` (dash), ` ` (space), or any custom character
+- **Rich CLI Styling**: Enhanced colors, alternating square backgrounds, and professional appearance
+- **Fallback Support**: Automatically falls back to plain text if rich CLI is not available
+- **Performance**: Rich rendering only when requested, plain text for maximum compatibility
+
+**Example Output:**
+```
+   a b c d e f g h  
+  +---------------+
+8 |♜ ♞ ♝ ♛ ♚ ♝ ♞ ♜| 8
+7 |♟ ♟ ♟ ♟ ♟ ♟ ♟ ♟| 7
+6 |                | 6
+5 |                | 5
+4 |                | 4
+3 |                | 3
+2 |♙ ♙ ♙ ♙ ♙ ♙ ♙ ♙| 2
+1 |♖ ♘ ♗ ♕ ♔ ♗ ♘ ♖| 1
+  +---------------+
+   a b c d e f g h  
+```
 
 ### Creating Custom Agents
 
@@ -168,6 +238,11 @@ The `ChessEnvironment` class provides several useful methods:
 - `play_game(verbose)`: Play a complete game
 - `get_pgn()`: Get the game in PGN format
 - `export_pgn_file(filename, include_metadata)`: Export game to PGN file
+- `display_board(highlight_last_move)`: Display chess board using Unicode pieces
+- `display_game_state(show_move_history)`: Display complete game state
+- `display_position_analysis()`: Display position analysis with material count
+- `display_move_sequence(moves, start_fen)`: Display sequence of moves
+- `set_renderer_options(show_coordinates, show_move_numbers)`: Configure display options
 
 **Constructor Parameters:**
 - `agent1`, `agent2`: The two chess agents to play
@@ -233,6 +308,7 @@ pytest -v
 ```
 chess/
 ├── env.py                 # Main chess environment
+├── chess_renderer.py      # Chess board renderer with Unicode pieces
 ├── requirements.txt       # Python dependencies
 ├── README.md             # This file
 ├── agents/               # Chess agent implementations
@@ -247,6 +323,7 @@ chess/
 │   ├── test_environment.py
 │   ├── test_agents.py
 │   ├── test_new_agents.py
+│   ├── test_chess_renderer.py
 │   └── test_integration.py
 └── chess_env/
     └── SPEC.md           # Technical specification

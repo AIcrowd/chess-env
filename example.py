@@ -5,6 +5,7 @@ Example script demonstrating the chess environment usage.
 
 import chess
 from agents import ChessAgent, FirstMoveAgent, LastMoveAgent, RandomAgent
+from chess_renderer import RICH_AVAILABLE
 from env import ChessEnvironment
 
 
@@ -217,6 +218,113 @@ def demonstrate_pgn_export():
         print("❌ Failed to export custom position PGN file")
 
 
+def demonstrate_chess_rendering():
+    """Demonstrate the new chess board rendering functionality."""
+    print("\n=== Chess Board Rendering Demo ===\n")
+    
+    # Create environment
+    env = ChessEnvironment(RandomAgent(), FirstMoveAgent(), max_moves=5)
+    
+    print("1. Basic Board Display:")
+    print("-" * 40)
+    print(env.display_board())
+    print()
+    
+    print("2. Game State Display:")
+    print("-" * 40)
+    print(env.display_game_state())
+    print()
+    
+    print("3. Position Analysis:")
+    print("-" * 40)
+    print(env.display_position_analysis())
+    print()
+    
+    # Play a few moves to show dynamic rendering
+    print("4. Playing Some Moves:")
+    print("-" * 40)
+    
+    # Play e4
+    env.board.push_san("e4")
+    env.move_history = ["e4"]
+    print("After 1. e4:")
+    print(env.display_board(highlight_last_move=True))
+    print()
+    
+    # Play e5
+    env.board.push_san("e5")
+    env.move_history = ["e4", "e5"]
+    print("After 1. e4 2. e5:")
+    print(env.display_board(highlight_last_move=True))
+    print()
+    
+    # Show move sequence
+    print("5. Move Sequence Display:")
+    print("-" * 40)
+    moves = [
+        chess.Move.from_uci("e2e4"),
+        chess.Move.from_uci("e7e5"),
+        chess.Move.from_uci("g1f3")
+    ]
+    print(env.display_move_sequence(moves))
+    
+    # Test renderer options
+    print("6. Renderer Options:")
+    print("-" * 40)
+    
+    print("Without coordinates:")
+    env.set_renderer_options(show_coordinates=False)
+    print(env.display_board())
+    print()
+    
+    print("With move numbers:")
+    env.set_renderer_options(show_coordinates=True, show_move_numbers=True)
+    print(env.renderer.render_board(env.board, move_number=3))
+    print()
+    
+    print("With different empty square characters:")
+    env.set_renderer_options(show_coordinates=True, show_move_numbers=False)
+    
+    # Test different empty square characters
+    for char in ["·", ".", "-", " "]:
+        env.set_renderer_options(empty_square_char=char)
+        print(f"Empty squares as '{char}':")
+        print(env.display_board())
+        print()
+    
+    # Test rich vs plain rendering
+    print("Rich CLI rendering (if available):")
+    env.set_renderer_options(use_rich=True, empty_square_char="·")
+    rich_output = env.display_board()
+    print(rich_output)
+    print()
+    
+    print("Plain text rendering:")
+    env.set_renderer_options(use_rich=False, empty_square_char="·")
+    plain_output = env.display_board()
+    print(plain_output)
+    print()
+    
+    # Reset to defaults
+    env.set_renderer_options(show_coordinates=True, show_move_numbers=False, 
+                           empty_square_char="·", use_rich=True)
+    
+    # Test custom position rendering
+    print("7. Custom Position Rendering:")
+    print("-" * 40)
+    custom_env = ChessEnvironment(
+        RandomAgent(), 
+        FirstMoveAgent(), 
+        initial_fen="rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+    )
+    print("Position after 1. e4:")
+    print(custom_env.display_board())
+    print()
+    
+    print("Position analysis for this position:")
+    print(custom_env.display_position_analysis())
+
+
 def main():
     """Run all demonstrations."""
     print("Chess Environment Demonstrations")
@@ -240,6 +348,9 @@ def main():
         
         # Agent analysis
         demonstrate_agent_analysis()
+        
+        # Chess rendering
+        demonstrate_chess_rendering()
         
         print("\n=== All demonstrations completed successfully! ===")
         

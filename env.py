@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import chess
 import chess.engine
 from agents import ChessAgent, RandomAgent
+from chess_renderer import RICH_AVAILABLE, ChessRenderer
 
 
 class ChessEnvironment:
@@ -43,6 +44,9 @@ class ChessEnvironment:
             self.reset(initial_fen)
         else:
             self._initial_fen = chess.STARTING_FEN
+        
+        # Initialize renderer
+        self.renderer = ChessRenderer()
 
     def reset(self, fen: str = chess.STARTING_FEN):
         """Reset the board to a new position."""
@@ -160,10 +164,12 @@ class ChessEnvironment:
         move_count = 0
 
         if verbose:
-            print(
-                f"Starting new game: {self.agent1.__class__.__name__} (White) vs {self.agent2.__class__.__name__} (Black)"
-            )
+            print(f"Starting new game: {self.agent1.__class__.__name__} (White) vs {self.agent2.__class__.__name__} (Black)")
             print(f"Initial position: {self.get_fen()}")
+            print()
+            # Show initial board
+            print(self.display_board(highlight_last_move=False))
+            print()
 
         while not self.is_game_over() and move_count < self.max_moves:
             current_side = self.get_side_to_move()
@@ -185,6 +191,10 @@ class ChessEnvironment:
             if verbose:
                 print(f"{current_side} plays: {self.get_last_move()}")
                 print(f"Position after move: {self.get_fen()}")
+                print()
+                # Show board after move
+                print(self.display_board(highlight_last_move=True))
+                print()
 
             move_count += 1
 
@@ -343,6 +353,86 @@ class ChessEnvironment:
         if hasattr(self, '_initial_fen') and self._initial_fen != chess.STARTING_FEN:
             return self._initial_fen
         return chess.STARTING_FEN
+
+    def display_board(self, highlight_last_move: bool = True) -> str:
+        """
+        Display the current chess board using Unicode characters.
+        
+        Args:
+            highlight_last_move: Whether to highlight the last move played
+            
+        Returns:
+            String representation of the chess board
+        """
+        last_move = None
+        if highlight_last_move and self.move_history:
+            # Get the last move from the board's move stack
+            if len(self.board.move_stack) > 0:
+                last_move = self.board.move_stack[-1]
+        
+        return self.renderer.render_board(self.board, last_move)
+    
+    def display_game_state(self, show_move_history: bool = True) -> str:
+        """
+        Display the complete game state including board and information.
+        
+        Args:
+            show_move_history: Whether to show the move history
+            
+        Returns:
+            String representation of the complete game state
+        """
+        return self.renderer.render_game_state(
+            self.board,
+            move_history=self.move_history if show_move_history else None,
+            side_to_move=self.get_side_to_move(),
+            game_result=self.get_game_result()
+        )
+    
+    def display_position_analysis(self) -> str:
+        """
+        Display position analysis including material count and legal moves.
+        
+        Returns:
+            String representation of the position analysis
+        """
+        return self.renderer.render_position_analysis(self.board)
+    
+    def display_move_sequence(self, moves: List[chess.Move], 
+                            start_fen: str = None) -> str:
+        """
+        Display a sequence of moves showing the board after each move.
+        
+        Args:
+            moves: List of moves to show
+            start_fen: Optional starting FEN position
+            
+        Returns:
+            String representation of the move sequence
+        """
+        return self.renderer.render_move_sequence(self.board, moves, start_fen)
+    
+    def set_renderer_options(self, show_coordinates: bool = None, 
+                           show_move_numbers: bool = None,
+                           empty_square_char: str = None,
+                           use_rich: bool = None) -> None:
+        """
+        Configure renderer display options.
+        
+        Args:
+            show_coordinates: Whether to show file/rank coordinates
+            show_move_numbers: Whether to show move numbers in the display
+            empty_square_char: Character to show for empty squares
+            use_rich: Whether to use rich CLI for enhanced rendering
+        """
+        if show_coordinates is not None:
+            self.renderer.show_coordinates = show_coordinates
+        if show_move_numbers is not None:
+            self.renderer.show_move_numbers = show_move_numbers
+        if empty_square_char is not None:
+            self.renderer.empty_square_char = empty_square_char
+        if use_rich is not None:
+            self.renderer.use_rich = use_rich and RICH_AVAILABLE
 
 
 def main():

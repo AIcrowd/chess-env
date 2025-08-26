@@ -457,3 +457,159 @@ class TestChessEnvironment:
         # This should generate a warning but still work
         move = slow_env.play_agent_move(slow_env.agent1, "White")
         assert move is not None
+
+    def test_display_board_basic(self):
+        """Test basic board display functionality."""
+        # Test initial board display
+        board_display = self.env.display_board()
+        
+        # Should contain Unicode chess pieces
+        assert "♙" in board_display  # White pawns
+        assert "♟" in board_display  # Black pawns
+        assert "♔" in board_display  # White king
+        assert "♚" in board_display  # Black king
+        
+        # Should contain coordinates (rich format by default)
+        assert "8" in board_display and "1" in board_display  # Rank labels
+        assert "a" in board_display and "h" in board_display  # File labels
+    
+    def test_display_board_with_last_move_highlight(self):
+        """Test board display with last move highlighting."""
+        # Play a move
+        self.env.board.push_san("e4")
+        self.env.move_history = ["e4"]
+        
+        # Display with highlighting
+        board_display = self.env.display_board(highlight_last_move=True)
+        
+        # Should highlight the last move (rich format highlights differently)
+        assert "♙" in board_display  # White pawn should be visible
+        # Note: Rich highlighting is visual and may not be easily testable in text
+    
+    def test_display_game_state(self):
+        """Test complete game state display."""
+        # Play some moves
+        self.env.board.push_san("e4")
+        self.env.board.push_san("e5")
+        self.env.move_history = ["e4", "e5"]
+        
+        game_state = self.env.display_game_state(show_move_history=True)
+        
+        # Should contain game information
+        assert "Side to move: White" in game_state
+        assert "Moves played: 2" in game_state
+        assert "Move history:" in game_state
+        assert "1. e4 2. e5" in game_state
+        
+        # Should contain board
+        assert "♙" in game_state
+        assert "♟" in game_state
+    
+    def test_display_game_state_without_history(self):
+        """Test game state display without move history."""
+        # Play some moves
+        self.env.board.push_san("e4")
+        self.env.move_history = ["e4"]
+        
+        game_state = self.env.display_game_state(show_move_history=False)
+        
+        # Should not contain move history
+        assert "Move history:" not in game_state
+        assert "1. e4" not in game_state
+        
+        # Should still contain board and basic info
+        assert "Side to move: Black" in game_state
+        assert "♙" in game_state
+    
+    def test_display_position_analysis(self):
+        """Test position analysis display."""
+        analysis = self.env.display_position_analysis()
+        
+        # Should contain analysis information
+        assert "Position Analysis:" in analysis
+        assert "White material: 39" in analysis
+        assert "Black material: 39" in analysis
+        assert "Material difference: +0" in analysis
+        assert "Legal moves: 20" in analysis
+        assert "Sample moves:" in analysis
+        
+        # Should contain board
+        assert "♙" in analysis
+        assert "♟" in analysis
+    
+    def test_display_move_sequence(self):
+        """Test move sequence display."""
+        # Create some moves
+        moves = [
+            chess.Move.from_uci("e2e4"),
+            chess.Move.from_uci("e7e5"),
+            chess.Move.from_uci("g1f3")
+        ]
+        
+        sequence = self.env.display_move_sequence(moves)
+        
+        # Should contain move sequence
+        assert "Move sequence:" in sequence
+        assert "Move 1: e2e4" in sequence  # UCI notation
+        assert "Move 2: e7e5" in sequence  # UCI notation
+        assert "Move 3: g1f3" in sequence  # UCI notation
+        
+        # Should show board after each move
+        assert "♙" in sequence
+        assert "♟" in sequence
+    
+    def test_display_move_sequence_with_custom_start(self):
+        """Test move sequence display with custom starting position."""
+        # Create environment with custom position
+        custom_fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+        env = ChessEnvironment(self.agent1, self.agent2, initial_fen=custom_fen)
+        
+        # Create some moves
+        moves = [
+            chess.Move.from_uci("g8f6"),
+            chess.Move.from_uci("d2d4")
+        ]
+        
+        sequence = env.display_move_sequence(moves, start_fen=custom_fen)
+        
+        # Should show initial position
+        assert "Initial position:" in sequence
+        assert "♙" in sequence  # White pawn on e4
+        
+        # Should show moves
+        assert "Move 1: g8f6" in sequence  # UCI notation
+        assert "Move 2: d2d4" in sequence  # UCI notation
+    
+    def test_set_renderer_options(self):
+        """Test renderer option configuration."""
+        # Test default options (rich rendering by default)
+        board_display = self.env.display_board()
+        # Rich format has different coordinate layout
+        assert "8" in board_display and "1" in board_display  # Rank labels
+        assert "a" in board_display and "h" in board_display  # File labels
+        
+        # Change options
+        self.env.set_renderer_options(show_coordinates=False, show_move_numbers=True,
+                                    empty_square_char=".", use_rich=False)
+        
+        # Test new options - coordinates should be hidden
+        board_display = self.env.display_board()
+        assert "a b c d e f g h" not in board_display  # Coordinates should be hidden
+        
+        # Test with move numbers - should show move number
+        board_display = self.env.renderer.render_board(self.env.board, move_number=5)
+        assert "Move 5" in board_display  # Move numbers should be shown
+        
+        # Test empty square character
+        empty_board = chess.Board()
+        empty_board.clear()
+        board_display = self.env.renderer.render_board(empty_board)
+        assert "." in board_display  # Should show dots for empty squares
+        
+        # Reset to defaults
+        self.env.set_renderer_options(show_coordinates=True, show_move_numbers=False,
+                                    empty_square_char="·", use_rich=True)
+        board_display = self.env.display_board()
+        # Should show coordinates in rich format
+        assert "8" in board_display and "1" in board_display  # Rank labels
+        assert "a" in board_display and "h" in board_display  # File labels
