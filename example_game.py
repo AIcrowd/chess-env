@@ -41,8 +41,8 @@ def main():
     # Create agents
     print("Creating agents...")
     openai_agent = OpenAIAgent(
-        model="gpt-5-mini",  # Use GPT-5-mini model
-        max_completion_tokens=500  # Short responses for moves
+        model="gpt-4o",  # Use GPT-4o
+        max_completion_tokens=500  
     )
     
     # Demonstrate custom prompt template customization
@@ -60,22 +60,47 @@ def main():
     print("  • {last_move}     - Description of the last move played")
     
     # Create a custom, focused prompt template
-    custom_template = """You are a tactical chess player. Analyze the position and choose the best move.
+    custom_template = """You are Magnus Carlsen, a chess grandmaster, with deep strategic understanding. Your task is to analyze the current chess position and select the best move available.
 
-BOARD POSITION:
+CURRENT BOARD STATE:
 {board_utf}
 
-GAME STATE:
-- Your turn: {side_to_move}
-- Available moves: {legal_moves_uci}
-- Game history: {move_history_san}
+POSITION INFORMATION:
+- FEN notation: {FEN}
+- Side to move: {side_to_move}
+- Last move played: {last_move}
+
+AVAILABLE MOVES:
+- Legal moves in UCI notation: {legal_moves_uci}
+- Legal moves in SAN notation: {legal_moves_san}
+
+GAME HISTORY:
+- Move history in UCI notation: {move_history_uci}
+- Move history in SAN notation: {move_history_san}
 
 INSTRUCTIONS:
-1. Evaluate the position for tactical opportunities
-2. Choose the strongest move from the legal options above
-3. Respond with your move in UCI notation wrapped in <uci_move></uci_move> tags
+1. Carefully analyze the position considering:
+   - Material balance and piece activity
+   - King safety and pawn structure
+   - Control of key squares and files
+   - Tactical opportunities and threats
+   - Strategic long-term advantages
 
-EXAMPLE: <uci_move>e2e4</uci_move>"""
+2. Select the best move from the available legal moves listed above.
+
+3. IMPORTANT: You MUST respond with your chosen move in UCI notation (e.g., "e2e4", "g1f3", "e1g1") wrapped in <uci_move></uci_move> tags.
+
+4. Do NOT use SAN notation (e.g., "e4", "Nf3", "O-O") in your response.
+
+5. If you cannot find a good move or believe the position is lost, respond with <uci_move>resign</uci_move>
+
+EXAMPLE RESPONSES:
+- Correct: <uci_move>e2e4</uci_move>
+- Correct: <uci_move>g1f3</uci_move>
+- Correct: <uci_move>e1g1</uci_move> (kingside castling)
+- Correct: <uci_move>resign</uci_move>
+
+Remember: Always use UCI notation and wrap your response in <uci_move></uci_move> tags."""
 
     print(f"\n🎯 Setting custom template:")
     print("-" * 50)
