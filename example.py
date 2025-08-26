@@ -367,7 +367,7 @@ def demonstrate_openai_agent():
             return False
         
         print("1. Testing OpenAI API connection...")
-        openai_agent = OpenAIAgent(api_key=api_key, model="gpt-5-mini", temperature=0.1)
+        openai_agent = OpenAIAgent(api_key=api_key, model="gpt-5-mini")
         
         if openai_agent.test_connection():
             print("✅ OpenAI API connection successful")
@@ -390,23 +390,45 @@ def demonstrate_openai_agent():
         
         # Test custom prompt template
         print("3. Testing custom prompt template...")
-        custom_template = """You are a chess expert. Choose the best move from the available options.
+        custom_template = """You are a tactical chess player focused on finding the most effective move in each position.
 
-Current board state:
+CURRENT BOARD STATE:
 {board_utf}
 
-Board position (FEN): {FEN}
-Last move: {last_move}
-Legal moves available (UCI): {legal_moves_uci}
-Legal moves available (SAN): {legal_moves_san}
-Move history (UCI): {move_history_uci}
-Move history (SAN): {move_history_san}
-It is your turn as {side_to_move}.
+POSITION ANALYSIS:
+- FEN notation: {FEN}
+- Side to move: {side_to_move}
+- Last move played: {last_move}
 
-Please respond with your chosen move wrapped in <uci_move></uci_move> tags.
-For example: <uci_move>e2e4</uci_move> or <uci_move>g1f3</uci_move>
+MOVES AVAILABLE:
+- Legal moves in UCI notation: {legal_moves_uci}
+- Legal moves in SAN notation: {legal_moves_san}
 
-If you cannot find a good move, respond with <uci_move>resign</uci_move>"""
+GAME CONTEXT:
+- Move history in UCI notation: {move_history_uci}
+- Move history in SAN notation: {move_history_san}
+
+YOUR TASK:
+1. Evaluate the position for:
+   - Immediate tactical opportunities
+   - Piece development and coordination
+   - Control of the center
+   - King safety considerations
+
+2. Choose the strongest move from the legal options listed above.
+
+3. CRITICAL: Respond with your move in UCI notation (e.g., "e2e4", "g1f3") wrapped in <uci_move></uci_move> tags.
+
+4. NEVER use SAN notation like "e4" or "Nf3" in your response.
+
+5. If the position is clearly lost, respond with <uci_move>resign</uci_move>
+
+EXAMPLE FORMAT:
+- <uci_move>e2e4</uci_move>
+- <uci_move>g1f3</uci_move>
+- <uci_move>e1g1</uci_move>
+
+Remember: UCI notation only, wrapped in <uci_move></uci_move> tags."""
         
         openai_agent.update_prompt_template(custom_template)
         print("✅ Custom prompt template updated")
@@ -414,9 +436,9 @@ If you cannot find a good move, respond with <uci_move>resign</uci_move>"""
         
         # Test generation parameters
         print("4. Testing generation parameters...")
-        openai_agent.update_generation_params(temperature=0.0, max_completion_tokens=20)
+        openai_agent.update_generation_params(max_completion_tokens=500)
         print("✅ Generation parameters updated")
-        print(f"   New temperature: {openai_agent.temperature}")
+        print(f"   Current temperature: {openai_agent.temperature}")
         print(f"   New max completion tokens: {openai_agent.max_tokens}")
         print()
         
@@ -447,6 +469,36 @@ If you cannot find a good move, respond with <uci_move>resign</uci_move>"""
         print("   " + "-" * 50)
         print(prompt[:200] + "..." if len(prompt) > 200 else prompt)
         print("   " + "-" * 50)
+        print()
+        
+        # Test actual OpenAI API call to see the response
+        print("7. Testing OpenAI API response...")
+        try:
+            print("   Calling OpenAI API with the formatted prompt...")
+            print(f"   Prompt length: {len(prompt)} characters")
+            print(f"   Generation params: {openai_agent.generation_params}")
+            
+            response = openai_agent._call_openai_api(prompt)
+            print("   ✅ OpenAI API response received:")
+            print("   " + "-" * 50)
+            print(f"   Response length: {len(response) if response else 0} characters")
+            print(f"   Response: '{response}'")
+            print("   " + "-" * 50)
+            
+            # Test move parsing
+            print("   Testing move parsing...")
+            try:
+                move = openai_agent._parse_move(response, legal_moves, board)
+                print(f"   ✅ Successfully parsed move: {move.uci()}")
+                print(f"   Move in SAN: {board.san(move)}")
+            except ValueError as e:
+                print(f"   ❌ Move parsing failed: {e}")
+                print("   This demonstrates the strict parsing requirements.")
+            
+        except Exception as e:
+            print(f"   ❌ OpenAI API call failed: {e}")
+            print("   This might be due to API limits or network issues.")
+        
         print()
         
         print("✅ OpenAI agent demonstration completed successfully!")

@@ -49,23 +49,47 @@ class OpenAIAgent(ChessAgent):
     }
     
     # Default prompt template following SPEC requirements
-    DEFAULT_PROMPT_TEMPLATE = """You are a chess grandmaster. Analyze the board and provide the best move.
+    DEFAULT_PROMPT_TEMPLATE = """You are Magnus Carlsen, a chess grandmaster, with deep strategic understanding. Your task is to analyze the current chess position and select the best move available.
 
-Current board state:
+CURRENT BOARD STATE:
 {board_utf}
 
-Board position (FEN): {FEN}
-Last move: {last_move}
-Legal moves available (UCI): {legal_moves_uci}
-Legal moves available (SAN): {legal_moves_san}
-Move history (UCI): {move_history_uci}
-Move history (SAN): {move_history_san}
-It is your turn as {side_to_move}.
+POSITION INFORMATION:
+- FEN notation: {FEN}
+- Side to move: {side_to_move}
+- Last move played: {last_move}
 
-Please respond with your chosen move wrapped in <uci_move></uci_move> tags.
-For example: <uci_move>e2e4</uci_move> or <uci_move>g1f3</uci_move>
+AVAILABLE MOVES:
+- Legal moves in UCI notation: {legal_moves_uci}
+- Legal moves in SAN notation: {legal_moves_san}
 
-If you cannot find a good move, respond with <uci_move>resign</uci_move>"""
+GAME HISTORY:
+- Move history in UCI notation: {move_history_uci}
+- Move history in SAN notation: {move_history_san}
+
+INSTRUCTIONS:
+1. Carefully analyze the position considering:
+   - Material balance and piece activity
+   - King safety and pawn structure
+   - Control of key squares and files
+   - Tactical opportunities and threats
+   - Strategic long-term advantages
+
+2. Select the best move from the available legal moves listed above.
+
+3. IMPORTANT: You MUST respond with your chosen move in UCI notation (e.g., "e2e4", "g1f3", "e1g1") wrapped in <uci_move></uci_move> tags.
+
+4. Do NOT use SAN notation (e.g., "e4", "Nf3", "O-O") in your response.
+
+5. If you cannot find a good move or believe the position is lost, respond with <uci_move>resign</uci_move>
+
+EXAMPLE RESPONSES:
+- Correct: <uci_move>e2e4</uci_move>
+- Correct: <uci_move>g1f3</uci_move>
+- Correct: <uci_move>e1g1</uci_move> (kingside castling)
+- Correct: <uci_move>resign</uci_move>
+
+Remember: Always use UCI notation and wrap your response in <uci_move></uci_move> tags."""
 
     def __init__(
         self,
@@ -132,11 +156,15 @@ If you cannot find a good move, respond with <uci_move>resign</uci_move>"""
                     )
                 self.fallback_behavior = env_fallback
         
-        # Additional OpenAI parameters
-        self.generation_params = {
-            "temperature": temperature,
-            **kwargs
-        }
+        # Additional OpenAI parameters - handle GPT-5 compatibility
+        self.generation_params = {}
+        
+        # Add temperature only for models that support it
+        if temperature is not None and not (self.model and "gpt-5" in self.model):
+            self.generation_params["temperature"] = temperature
+        
+        # Add other parameters
+        self.generation_params.update(kwargs)
         
         # Always use max_completion_tokens for the new Python API
         self.generation_params["max_completion_tokens"] = max_tokens
@@ -331,7 +359,10 @@ If you cannot find a good move, respond with <uci_move>resign</uci_move>"""
                 
                 # Extract the response content
                 if response.choices and response.choices[0].message:
-                    return response.choices[0].message.content.strip()
+                    content = response.choices[0].message.content
+                    if content is None:
+                        raise ValueError("OpenAI API returned None content")
+                    return content.strip()
                 else:
                     raise ValueError("Empty response from OpenAI API")
                     
@@ -475,6 +506,12 @@ If you cannot find a good move, respond with <uci_move>resign</uci_move>"""
         if "max_tokens" in kwargs:
             # Convert max_tokens to max_completion_tokens for the new Python API
             kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+        
+        # Handle temperature updates for GPT-5 models
+        if "temperature" in kwargs and (self.model and "gpt-5" in self.model):
+            # Remove temperature for GPT-5 models as they don't support it
+            kwargs.pop("temperature")
+            print("   Note: Temperature parameter removed for GPT-5 model (not supported)")
         
         self.generation_params.update(kwargs)
         
