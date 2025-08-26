@@ -18,7 +18,7 @@ class ChessAgent(ABC):
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> chess.Move:
+    ) -> tuple[chess.Move, str | None]:
         """
         Choose a move from the given legal moves.
         
@@ -29,6 +29,8 @@ class ChessAgent(ABC):
             side_to_move: Which side is to move ('White' or 'Black')
             
         Returns:
-            The chosen chess move
+            Tuple of (chosen_move, optional_comment)
+            - chosen_move: The chess move to play
+            - optional_comment: Optional comment explaining the move (can be None)
         """
         pass

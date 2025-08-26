@@ -34,7 +34,8 @@ class TestRandomAgent:
     def test_choose_move_returns_legal_move(self):
         """Test that choose_move returns a legal move."""
         legal_moves = list(self.board.legal_moves)
-        move = self.agent.choose_move(self.board, legal_moves, [], "White")
+        move_result = self.agent.choose_move(self.board, legal_moves, [], "White")
+        move, comment = move_result
         assert move in legal_moves
 
     def test_choose_move_with_empty_legal_moves(self):
@@ -56,7 +57,8 @@ class TestRandomAgent:
         # Test with a position that has very few moves
         board = chess.Board("8/8/8/8/8/8/8/4K3 w - - 0 1")  # King only
         legal_moves = list(board.legal_moves)
-        move = self.agent.choose_move(board, legal_moves, [], "White")
+        move_result = self.agent.choose_move(board, legal_moves, [], "White")
+        move, comment = move_result
         assert move in legal_moves
         assert len(legal_moves) > 0  # King has multiple legal moves
 
@@ -69,7 +71,8 @@ class TestRandomAgent:
         # Run multiple times to ensure randomness
         moves_chosen = set()
         for _ in range(10):
-            move = self.agent.choose_move(self.board, legal_moves, [], "White")
+            move_result = self.agent.choose_move(self.board, legal_moves, [], "White")
+            move, comment = move_result
             moves_chosen.add(move)
 
         # Should have chosen different moves (randomness)
@@ -82,9 +85,10 @@ class TestRandomAgent:
         side_to_move = "Black"
 
         # This should not raise any errors
-        move = self.agent.choose_move(
+        move_result = self.agent.choose_move(
             self.board, legal_moves, move_history, side_to_move
         )
+        move, comment = move_result
         assert move in legal_moves
 
     def test_choose_move_with_different_positions(self):
@@ -94,13 +98,15 @@ class TestRandomAgent:
             "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
         )
         legal_moves = list(board.legal_moves)
-        move = self.agent.choose_move(board, legal_moves, ["e4"], "Black")
+        move_result = self.agent.choose_move(board, legal_moves, ["e4"], "Black")
+        move, comment = move_result
         assert move in legal_moves
 
         # Test with an endgame position
         board = chess.Board("8/8/8/8/8/8/8/4K3 w - - 0 1")  # King only
         legal_moves = list(board.legal_moves)
-        move = self.agent.choose_move(board, legal_moves, [], "White")
+        move_result = self.agent.choose_move(board, legal_moves, [], "White")
+        move, comment = move_result
         assert move in legal_moves
 
     def test_choose_move_consistency(self):
@@ -109,7 +115,8 @@ class TestRandomAgent:
 
         # Since it's random, we can't test exact consistency, but we can test it doesn't crash
         for _ in range(5):
-            move = self.agent.choose_move(self.board, legal_moves, [], "White")
+            move_result = self.agent.choose_move(self.board, legal_moves, [], "White")
+            move, comment = move_result
             assert move in legal_moves
 
     def test_choose_move_with_long_move_history(self):
@@ -129,7 +136,8 @@ class TestRandomAgent:
         ]
         legal_moves = list(self.board.legal_moves)
 
-        move = self.agent.choose_move(self.board, legal_moves, long_history, "White")
+        move_result = self.agent.choose_move(self.board, legal_moves, long_history, "White")
+        move, comment = move_result
         assert move in legal_moves
 
     def test_choose_move_edge_cases(self):
@@ -152,5 +160,6 @@ class TestRandomAgent:
         legal_moves = list(board.legal_moves)
         assert len(legal_moves) > 0  # This position has legal moves
 
-        move = self.agent.choose_move(board, legal_moves, [], "Black")
+        move_result = self.agent.choose_move(board, legal_moves, [], "Black")
+        move, comment = move_result
         assert move in legal_moves

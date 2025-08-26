@@ -286,7 +286,7 @@ class StockfishAgent(ChessAgent):
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> chess.Move:
+    ) -> tuple[chess.Move, str | None]:
         """
         Choose the best move using Stockfish engine.
         
@@ -297,7 +297,9 @@ class StockfishAgent(ChessAgent):
             side_to_move: Which side is to move ('White' or 'Black')
             
         Returns:
-            The best move according to Stockfish
+            Tuple of (chosen_move, optional_comment)
+            - chosen_move: The best move according to Stockfish
+            - optional_comment: Comment describing the move evaluation
             
         Raises:
             RuntimeError: If Stockfish fails to provide a move
@@ -319,14 +321,19 @@ class StockfishAgent(ChessAgent):
             if best_move not in legal_moves:
                 # If Stockfish suggests an illegal move, fall back to first legal move
                 print(f"Warning: Stockfish suggested illegal move {best_move_uci}, using first legal move")
-                return legal_moves[0]
+                return legal_moves[0], "Fallback move - Stockfish suggested illegal move"
             
-            return best_move
+            # Create a comment about the move
+            comment = f"Stockfish engine move (depth: {self.depth}, skill: {self.skill_level})"
+            if self.elo_rating:
+                comment += f", ELO limited to {self.elo_rating}"
+            
+            return best_move, comment
             
         except Exception as e:
             # Fallback to first legal move if Stockfish fails
             print(f"Warning: Stockfish failed: {e}, using first legal move")
-            return legal_moves[0]
+            return legal_moves[0], f"Fallback move - Stockfish failed: {e}"
     
     def update_parameters(self, parameters: Dict[str, Any]):
         """

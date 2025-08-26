@@ -21,7 +21,7 @@ class RandomAgent(ChessAgent):
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> chess.Move:
+    ) -> tuple[chess.Move, str | None]:
         """
         Choose a random move from the legal moves.
         
@@ -32,9 +32,12 @@ class RandomAgent(ChessAgent):
             side_to_move: Which side is to move ('White' or 'Black')
             
         Returns:
-            A randomly chosen legal move
+            Tuple of (chosen_move, optional_comment)
+            - chosen_move: A randomly chosen legal move
+            - optional_comment: None (random moves don't need explanation)
             
         Raises:
             IndexError: If no legal moves are available
         """
-        return random.choice(legal_moves)
+        move = random.choice(legal_moves)
+        return move, None

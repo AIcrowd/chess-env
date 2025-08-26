@@ -29,7 +29,7 @@ class TemplateAgent(ChessAgent):
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> chess.Move:
+    ) -> tuple[chess.Move, str | None]:
         """
         Choose a move based on your custom strategy.
         
@@ -41,12 +41,14 @@ class TemplateAgent(ChessAgent):
         
         Args:
             board: Current chess board state
-            legal_moves: List of legal moves available
-            move_history: List of moves played so far (in UCI notation)
-            side_to_move: Which side is to move ('White' or 'Black')
+        legal_moves: List of legal moves available
+        move_history: List of moves played so far (in UCI notation)
+        side_to_move: Which side is to move ('White' or 'Black')
             
         Returns:
-            The chosen chess move
+            Tuple of (chosen_move, optional_comment)
+            - chosen_move: The chosen chess move
+            - optional_comment: Optional comment explaining the move strategy
             
         Example strategies you could implement:
         - Material counting (evaluate piece values)
@@ -57,7 +59,9 @@ class TemplateAgent(ChessAgent):
         """
         # TODO: Implement your chess strategy here!
         # For now, just return the first legal move (like FirstMoveAgent)
-        return legal_moves[0]
+        move = legal_moves[0]
+        comment = "Template agent - using first available move"
+        return move, comment
     
     def evaluate_position(self, board: chess.Board) -> float:
         """

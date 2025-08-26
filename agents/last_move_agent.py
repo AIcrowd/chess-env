@@ -20,7 +20,7 @@ class LastMoveAgent(ChessAgent):
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> chess.Move:
+    ) -> tuple[chess.Move, str | None]:
         """
         Choose the last available legal move.
         
@@ -31,9 +31,12 @@ class LastMoveAgent(ChessAgent):
             side_to_move: Which side is to move ('White' or 'Black')
             
         Returns:
-            The last legal move from the list
+            Tuple of (chosen_move, optional_comment)
+            - chosen_move: The last legal move from the list
+            - optional_comment: None (last move strategy is self-explanatory)
             
         Raises:
             IndexError: If no legal moves are available
         """
-        return legal_moves[-1]
+        move = legal_moves[-1]
+        return move, None

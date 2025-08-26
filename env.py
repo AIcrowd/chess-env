@@ -36,6 +36,7 @@ class ChessEnvironment:
         self.time_limit = time_limit
         self.board = chess.Board()
         self.move_history = []
+        self.move_comments = []  # Store comments for each move
         self.game_result = None
         
         # Set initial position if provided
@@ -52,6 +53,7 @@ class ChessEnvironment:
         """Reset the board to a new position."""
         self.board = chess.Board(fen)
         self.move_history = []
+        self.move_comments = []
         self.game_result = None
         self._initial_fen = fen
 
@@ -76,6 +78,18 @@ class ChessEnvironment:
         if not self.move_history:
             return None
         return self.move_history[-1]
+    
+    def get_last_move_comment(self) -> Optional[str]:
+        """Get the comment for the last move played."""
+        if not self.move_comments:
+            return None
+        return self.move_comments[-1]
+    
+    def get_move_comment(self, move_index: int) -> Optional[str]:
+        """Get the comment for a specific move by index."""
+        if 0 <= move_index < len(self.move_comments):
+            return self.move_comments[move_index]
+        return None
 
     def is_game_over(self) -> bool:
         """Check if the game is over."""
@@ -111,12 +125,13 @@ class ChessEnvironment:
             else:
                 return "Draw"
 
-    def play_move(self, move: chess.Move) -> bool:
+    def play_move(self, move: chess.Move, comment: str | None = None) -> bool:
         """
         Play a move on the board.
 
         Args:
             move: The move to play
+            comment: Optional comment about the move
 
         Returns:
             True if the move was successful, False otherwise
@@ -125,6 +140,7 @@ class ChessEnvironment:
             uci_move = move.uci()
             self.board.push(move)
             self.move_history.append(uci_move)
+            self.move_comments.append(comment)
             return True
         return False
 
@@ -146,8 +162,16 @@ class ChessEnvironment:
         try:
             # Get move from agent
             start_time = time.time()
-            move = agent.choose_move(self.board, legal_moves, self.move_history, side)
+            move_result = agent.choose_move(self.board, legal_moves, self.move_history, side)
             move_time = time.time() - start_time
+            
+            # Handle the new tuple return format
+            if isinstance(move_result, tuple):
+                move, comment = move_result
+            else:
+                # Backward compatibility for old agents
+                move = move_result
+                comment = None
 
             # Check time limit
             if move_time > self.time_limit:
@@ -157,7 +181,7 @@ class ChessEnvironment:
 
             # Validate and play the move
             if move in legal_moves:
-                self.play_move(move)
+                self.play_move(move, comment)
                 return move
             else:
                 print(f"Warning: {side} returned illegal move {move}")
@@ -213,15 +237,22 @@ class ChessEnvironment:
                 break
 
             if verbose:
-                print(f"✅ {current_side} plays: {self.get_last_move()}")
+                move_uci = self.get_last_move()
+                move_comment = self.get_last_move_comment()
+                
+                print(f"✅ {current_side} plays: {move_uci}")
+                if move_comment:
+                    print(f"   Comment: {move_comment}")
                 
                 # Show board after move (only rich version for clarity)
-                print(f"\nPosition after {move_count + 1}. {self.get_last_move()}:")
+                print(f"\nPosition after {move_count + 1}. {move_uci}:")
                 self.renderer.render_board(self.board, last_move=move, output_mode="clean")
                 print()
                 
                 # Show move summary
-                print(f"Move {move_count + 1}: {self.get_last_move()} | Side: {current_side} | Agent: {current_agent.__class__.__name__}")
+                print(f"Move {move_count + 1}: {move_uci} | Side: {current_side} | Agent: {current_agent.__class__.__name__}")
+                if move_comment:
+                    print(f"   Analysis: {move_comment}")
                 print("-" * 60)
 
             move_count += 1
@@ -241,6 +272,7 @@ class ChessEnvironment:
             "result": result,
             "moves_played": move_count,
             "move_history": self.move_history.copy(),
+            "move_comments": self.move_comments.copy(),
             "final_fen": self.get_fen(),
             "white_agent": self.agent1.__class__.__name__,
             "black_agent": self.agent2.__class__.__name__,
@@ -260,15 +292,24 @@ class ChessEnvironment:
         san_moves = []
         temp_board = chess.Board(self._initial_fen)
         
-        for uci_move in self.move_history:
+        for i, uci_move in enumerate(self.move_history):
             move = chess.Move.from_uci(uci_move)
             try:
                 san_move = temp_board.san(move)
-                san_moves.append(san_move)
+                # Add comment if available
+                comment = self.move_comments[i] if i < len(self.move_comments) and self.move_comments[i] else None
+                if comment:
+                    san_moves.append(f"{san_move} {{{comment}}}")
+                else:
+                    san_moves.append(san_move)
                 temp_board.push(move)
             except:
                 # Fallback to UCI if SAN conversion fails
-                san_moves.append(uci_move)
+                comment = self.move_comments[i] if i < len(self.move_comments) and self.move_comments[i] else None
+                if comment:
+                    san_moves.append(f"{uci_move} {{{comment}}}")
+                else:
+                    san_moves.append(uci_move)
                 temp_board.push(move)
         
         pgn_lines = [
@@ -328,15 +369,24 @@ class ChessEnvironment:
         san_moves = []
         temp_board = chess.Board(self._initial_fen)
         
-        for uci_move in self.move_history:
+        for i, uci_move in enumerate(self.move_history):
             move = chess.Move.from_uci(uci_move)
             try:
                 san_move = temp_board.san(move)
-                san_moves.append(san_move)
+                # Add comment if available
+                comment = self.move_comments[i] if i < len(self.move_comments) and self.move_comments[i] else None
+                if comment:
+                    san_moves.append(f"{san_move} {{{comment}}}")
+                else:
+                    san_moves.append(san_move)
                 temp_board.push(move)
             except:
                 # Fallback to UCI if SAN conversion fails
-                san_moves.append(uci_move)
+                comment = self.move_comments[i] if i < len(self.move_comments) and self.move_comments[i] else None
+                if comment:
+                    san_moves.append(f"{uci_move} {{{comment}}}")
+                else:
+                    san_moves.append(uci_move)
                 temp_board.push(move)
         
         # Basic PGN headers

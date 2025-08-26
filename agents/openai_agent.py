@@ -429,13 +429,38 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         # Valid UCI move found
         return move
     
+    def _extract_comment(self, response: str) -> str | None:
+        """
+        Extract a comment from the model's response.
+        
+        Args:
+            response: Raw response from the model
+            
+        Returns:
+            Comment string if found, None otherwise
+        """
+        # Clean the response
+        response = response.strip()
+        
+        # Look for comments outside of UCI tags
+        # Remove the UCI move tags to get the comment
+        import re
+        uci_pattern = r'<uci_move>(.*?)</uci_move>'
+        response_without_tags = re.sub(uci_pattern, '', response, flags=re.IGNORECASE)
+        
+        # Clean up the remaining text
+        comment = response_without_tags.strip()
+        
+        # Return comment if it's not empty, otherwise None
+        return comment if comment else None
+    
     def choose_move(
         self,
         board: chess.Board,
         legal_moves: List[chess.Move],
         move_history: List[str],
         side_to_move: str,
-    ) -> chess.Move:
+    ) -> tuple[chess.Move, str | None]:
         """
         Choose the best move using OpenAI's API.
         
@@ -446,7 +471,9 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
             side_to_move: Which side is to move ('White' or 'Black')
             
         Returns:
-            The chosen chess move
+            Tuple of (chosen_move, optional_comment)
+            - chosen_move: The chosen chess move
+            - optional_comment: Comment from the AI model explaining the move
             
         Raises:
             ValueError: If no legal moves are available or parsing fails
@@ -463,12 +490,14 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         except Exception as e:
             # If API call fails, fall back to first legal move
             print(f"Warning: OpenAI API call failed: {e}, using first legal move")
-            return legal_moves[0]
+            return legal_moves[0], f"Fallback move - OpenAI API failed: {e}"
         
         # Parse the response to get the move
         try:
             move = self._parse_move(response, legal_moves, board)
-            return move
+            # Extract comment from the response if available
+            comment = self._extract_comment(response)
+            return move, comment
         except ValueError as e:
             # Check if the model chose to resign
             if "resign" in str(e).lower():
@@ -476,14 +505,14 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
                     raise ValueError("Model chose to resign the game")
                 else:
                     print("Warning: Model chose to resign, but fallback behavior is 'random_move'. Using first legal move.")
-                    return legal_moves[0]
+                    return legal_moves[0], "Fallback move - Model chose to resign"
             
             # If parsing fails, handle according to fallback behavior
             if self.fallback_behavior == "resign":
                 raise ValueError(f"Could not parse valid move: {e}")
             else:
                 print(f"Warning: Could not parse move from response: {e}, using first legal move")
-                return legal_moves[0]
+                return legal_moves[0], f"Fallback move - Parsing failed: {e}"
     
     def update_prompt_template(self, new_template: str):
         """

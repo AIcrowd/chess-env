@@ -209,8 +209,9 @@ class TestStockfishAgent:
         
         # Mock the move selection to return the expected move
         with patch.object(agent, '_get_best_move', return_value="e2e4"):
-            move = agent.choose_move(board, legal_moves, [], "White")
+            move_result = agent.choose_move(board, legal_moves, [], "White")
         
+        move, comment = move_result
         assert move is not None
         assert move.uci() == "e2e4"
     
@@ -236,8 +237,9 @@ class TestStockfishAgent:
         
         # Mock the move selection to fail
         with patch.object(agent, '_get_best_move', side_effect=Exception("Stockfish error")):
-            move = agent.choose_move(board, legal_moves, [], "White")
+            move_result = agent.choose_move(board, legal_moves, [], "White")
         
+        move, comment = move_result
         # Should fall back to first legal move
         assert move == legal_moves[0]
     
@@ -263,8 +265,9 @@ class TestStockfishAgent:
         
         # Mock Stockfish to return an illegal move
         with patch.object(agent, '_get_best_move', return_value="a1a9"):
-            move = agent.choose_move(board, legal_moves, [], "White")
+            move_result = agent.choose_move(board, legal_moves, [], "White")
         
+        move, comment = move_result
         # Should fall back to first legal move
         assert move == legal_moves[0]
     
@@ -529,7 +532,8 @@ class TestStockfishAgentIntegration:
             legal_moves = list(board.legal_moves)
             
             # Get a move
-            move = agent.choose_move(board, legal_moves, [], "White")
+            move_result = agent.choose_move(board, legal_moves, [], "White")
+            move, comment = move_result
             
             assert move is not None
             assert move in legal_moves
