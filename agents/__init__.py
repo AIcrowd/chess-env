@@ -8,5 +8,6 @@ from .base import ChessAgent
 from .first_move_agent import FirstMoveAgent
 from .last_move_agent import LastMoveAgent
 from .random_agent import RandomAgent
+from .stockfish_agent import StockfishAgent
 
-__all__ = ["ChessAgent", "RandomAgent", "FirstMoveAgent", "LastMoveAgent"]
+__all__ = ["ChessAgent", "RandomAgent", "FirstMoveAgent", "LastMoveAgent", "StockfishAgent"]

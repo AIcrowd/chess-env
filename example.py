@@ -4,7 +4,7 @@ Example script demonstrating the chess environment usage.
 """
 
 import chess
-from agents import ChessAgent, FirstMoveAgent, LastMoveAgent, RandomAgent
+from agents import ChessAgent, FirstMoveAgent, LastMoveAgent, RandomAgent, StockfishAgent
 from chess_renderer import RICH_AVAILABLE
 from env import ChessEnvironment
 
@@ -216,6 +216,152 @@ def demonstrate_pgn_export():
         print(f"🗑️  Cleaned up {custom_filename}.pgn")
     else:
         print("❌ Failed to export custom position PGN file")
+
+
+def demonstrate_stockfish_agent():
+    """Demonstrate the Stockfish agent functionality."""
+    print("\n=== Stockfish Agent Demo ===\n")
+    
+    try:
+        # Create a Stockfish agent with default settings
+        print("1. Creating Stockfish agent with default settings...")
+        stockfish_agent = StockfishAgent()
+        print(f"✅ Stockfish agent created successfully")
+        print(f"   Binary path: {stockfish_agent.stockfish_path}")
+        print(f"   Skill level: {stockfish_agent.skill_level}")
+        print(f"   Search depth: {stockfish_agent.depth}")
+        print(f"   Hash size: {stockfish_agent.hash_size_mb} MB")
+        print(f"   Threads: {stockfish_agent.threads}")
+        print()
+        
+        # Test against a random agent
+        print("2. Testing Stockfish vs Random agent...")
+        random_agent = RandomAgent()
+        
+        env = ChessEnvironment(stockfish_agent, random_agent, max_moves=10, time_limit=5.0)
+        
+        print("Playing a short game...")
+        result = env.play_game(verbose=True)
+        print(f"Game result: {result['result']} in {result['moves_played']} moves")
+        print()
+        
+        # Test different skill levels
+        print("3. Testing different skill levels...")
+        skill_levels = [5, 10, 15, 20]
+        
+        for skill in skill_levels:
+            print(f"Testing skill level {skill}...")
+            try:
+                # Create new agent with specific skill level
+                test_agent = StockfishAgent(skill_level=skill, depth=8)
+                
+                # Quick test game
+                test_env = ChessEnvironment(test_agent, RandomAgent(), max_moves=5, time_limit=2.0)
+                test_result = test_env.play_game(verbose=False)
+                print(f"  Skill {skill}: {test_result['result']} in {test_result['moves_played']} moves")
+                
+                test_agent.close()
+                
+            except Exception as e:
+                print(f"  Skill {skill}: Failed - {e}")
+        
+        print()
+        
+        # Test ELO rating limitation
+        print("4. Testing ELO rating limitation...")
+        try:
+            elo_agent = StockfishAgent(elo_rating=1200, depth=8)
+            print(f"✅ ELO-limited agent created (1200 rating)")
+            
+            # Quick test
+            elo_env = ChessEnvironment(elo_agent, RandomAgent(), max_moves=5, time_limit=2.0)
+            elo_result = elo_env.play_game(verbose=False)
+            print(f"   ELO 1200 game: {elo_result['result']} in {elo_result['moves_played']} moves")
+            
+            elo_agent.close()
+            
+        except Exception as e:
+            print(f"❌ ELO limitation failed: {e}")
+        
+        print()
+        
+        # Test custom parameters
+        print("5. Testing custom parameters...")
+        try:
+            custom_agent = StockfishAgent(
+                depth=12,
+                hash_size_mb=256,
+                threads=2,
+                time_limit_ms=1000,
+                parameters={"Contempt": 10, "Min Split Depth": 2}
+            )
+            print(f"✅ Custom agent created successfully")
+            print(f"   Custom depth: {custom_agent.depth}")
+            print(f"   Custom hash: {custom_agent.hash_size_mb} MB")
+            print(f"   Custom threads: {custom_agent.threads}")
+            print(f"   Time limit: {custom_agent.time_limit_ms} ms")
+            
+            # Test the custom agent
+            custom_env = ChessEnvironment(custom_agent, RandomAgent(), max_moves=5, time_limit=3.0)
+            custom_result = custom_env.play_game(verbose=False)
+            print(f"   Custom agent game: {custom_result['result']} in {custom_result['moves_played']} moves")
+            
+            custom_agent.close()
+            
+        except Exception as e:
+            print(f"❌ Custom parameters failed: {e}")
+        
+        print()
+        
+        # Test parameter updates
+        print("6. Testing parameter updates...")
+        try:
+            update_agent = StockfishAgent(depth=10)
+            print(f"✅ Agent created with depth 10")
+            
+            # Update parameters during runtime
+            update_agent.set_depth(15)
+            update_agent.set_skill_level(15)
+            update_agent.set_time_limit(2000)
+            
+            print(f"   Updated depth: {update_agent.depth}")
+            print(f"   Updated skill: {update_agent.skill_level}")
+            print(f"   Updated time limit: {update_agent.time_limit_ms} ms")
+            
+            # Test updated agent
+            update_env = ChessEnvironment(update_agent, RandomAgent(), max_moves=5, time_limit=4.0)
+            update_result = update_env.play_game(verbose=False)
+            print(f"   Updated agent game: {update_result['result']} in {update_result['moves_played']} moves")
+            
+            update_agent.close()
+            
+        except Exception as e:
+            print(f"❌ Parameter updates failed: {e}")
+        
+        # Clean up the main agent
+        stockfish_agent.close()
+        
+        print("\n✅ Stockfish agent demonstration completed successfully!")
+        return True
+        
+    except RuntimeError as e:
+        if "Stockfish binary not found" in str(e):
+            print("❌ Stockfish not available on this system")
+            print("   To use Stockfish agent, please install Stockfish:")
+            print("   - macOS: brew install stockfish")
+            print("   - Ubuntu/Debian: sudo apt install stockfish")
+            print("   - Windows: Download from https://stockfishchess.org/download/")
+            print("   - Or set STOCKFISH_PATH environment variable")
+            print()
+            print("   For now, continuing with other demonstrations...")
+            return False
+        else:
+            print(f"❌ Stockfish agent failed: {e}")
+            return False
+    
+    except Exception as e:
+        print(f"❌ Unexpected error with Stockfish agent: {e}")
+        return False
 
 
 def demonstrate_chess_rendering():
@@ -431,10 +577,15 @@ def main():
         # Agent analysis
         demonstrate_agent_analysis()
         
+        # Stockfish agent (if available)
+        stockfish_success = demonstrate_stockfish_agent()
+        
         # Chess rendering
         demonstrate_chess_rendering()
         
         print("\n=== All demonstrations completed successfully! ===")
+        if not stockfish_success:
+            print("Note: Stockfish agent demonstration was skipped due to missing Stockfish binary.")
         
     except Exception as e:
         print(f"\nError during demonstration: {e}")
