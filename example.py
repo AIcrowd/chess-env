@@ -4,7 +4,13 @@ Example script demonstrating the chess environment usage.
 """
 
 import chess
-from agents import ChessAgent, FirstMoveAgent, LastMoveAgent, RandomAgent, StockfishAgent
+from agents import (
+    ChessAgent,
+    FirstMoveAgent,
+    LastMoveAgent,
+    RandomAgent,
+    StockfishAgent,
+)
 from chess_renderer import RICH_AVAILABLE
 from env import ChessEnvironment
 
@@ -238,9 +244,9 @@ def demonstrate_stockfish_agent():
         print("2. Testing Stockfish vs Random agent...")
         random_agent = RandomAgent()
         
-        env = ChessEnvironment(stockfish_agent, random_agent, max_moves=10, time_limit=5.0)
+        env = ChessEnvironment(stockfish_agent, random_agent, max_moves=6, time_limit=3.0)
         
-        print("Playing a short game...")
+        print("Playing a very short game...")
         result = env.play_game(verbose=True)
         print(f"Game result: {result['result']} in {result['moves_played']} moves")
         print()
@@ -254,16 +260,11 @@ def demonstrate_stockfish_agent():
             try:
                 # Create new agent with specific skill level
                 test_agent = StockfishAgent(skill_level=skill, depth=8)
-                
-                # Quick test game
-                test_env = ChessEnvironment(test_agent, RandomAgent(), max_moves=5, time_limit=2.0)
-                test_result = test_env.play_game(verbose=False)
-                print(f"  Skill {skill}: {test_result['result']} in {test_result['moves_played']} moves")
-                
+                print(f"  ✅ Skill {skill}: Agent created successfully")
                 test_agent.close()
                 
             except Exception as e:
-                print(f"  Skill {skill}: Failed - {e}")
+                print(f"  ❌ Skill {skill}: Failed - {e}")
         
         print()
         
@@ -272,12 +273,7 @@ def demonstrate_stockfish_agent():
         try:
             elo_agent = StockfishAgent(elo_rating=1200, depth=8)
             print(f"✅ ELO-limited agent created (1200 rating)")
-            
-            # Quick test
-            elo_env = ChessEnvironment(elo_agent, RandomAgent(), max_moves=5, time_limit=2.0)
-            elo_result = elo_env.play_game(verbose=False)
-            print(f"   ELO 1200 game: {elo_result['result']} in {elo_result['moves_played']} moves")
-            
+            print(f"   ELO rating: {elo_agent.elo_rating}")
             elo_agent.close()
             
         except Exception as e:
@@ -300,12 +296,6 @@ def demonstrate_stockfish_agent():
             print(f"   Custom hash: {custom_agent.hash_size_mb} MB")
             print(f"   Custom threads: {custom_agent.threads}")
             print(f"   Time limit: {custom_agent.time_limit_ms} ms")
-            
-            # Test the custom agent
-            custom_env = ChessEnvironment(custom_agent, RandomAgent(), max_moves=5, time_limit=3.0)
-            custom_result = custom_env.play_game(verbose=False)
-            print(f"   Custom agent game: {custom_result['result']} in {custom_result['moves_played']} moves")
-            
             custom_agent.close()
             
         except Exception as e:
@@ -327,12 +317,6 @@ def demonstrate_stockfish_agent():
             print(f"   Updated depth: {update_agent.depth}")
             print(f"   Updated skill: {update_agent.skill_level}")
             print(f"   Updated time limit: {update_agent.time_limit_ms} ms")
-            
-            # Test updated agent
-            update_env = ChessEnvironment(update_agent, RandomAgent(), max_moves=5, time_limit=4.0)
-            update_result = update_env.play_game(verbose=False)
-            print(f"   Updated agent game: {update_result['result']} in {update_result['moves_played']} moves")
-            
             update_agent.close()
             
         except Exception as e:
