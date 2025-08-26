@@ -1,7 +1,8 @@
 """
-Template for implementing new chess agents.
+Template chess agent implementation.
 
-Copy this file and modify it to create your own chess agent.
+This is a template for implementing custom chess agents.
+Copy this file and modify the choose_move method to implement your strategy.
 """
 
 from typing import List
@@ -13,26 +14,14 @@ from .base import ChessAgent
 
 class TemplateAgent(ChessAgent):
     """
-    Template agent - replace this with your agent implementation.
+    Template agent that you can extend to implement your own chess strategy.
     
-    This is a starting point for implementing new chess agents.
-    You can implement various strategies like:
-    - Minimax with alpha-beta pruning
-    - Monte Carlo Tree Search (MCTS)
-    - Neural network evaluation
-    - Opening book moves
-    - Endgame tablebase lookups
+    To use this template:
+    1. Copy this file to a new file (e.g., my_agent.py)
+    2. Rename the class to something descriptive (e.g., MyAgent)
+    3. Implement the choose_move method with your strategy
+    4. Import and use your agent in your code
     """
-    
-    def __init__(self, **kwargs):
-        """
-        Initialize your agent with any parameters it needs.
-        
-        Args:
-            **kwargs: Any configuration parameters for your agent
-        """
-        # Add your initialization code here
-        pass
     
     def choose_move(
         self,
@@ -42,40 +31,33 @@ class TemplateAgent(ChessAgent):
         side_to_move: str,
     ) -> chess.Move:
         """
-        Choose a move using your agent's strategy.
+        Choose a move based on your custom strategy.
+        
+        This is where you implement your chess logic. You have access to:
+        - board: The current chess position
+        - legal_moves: List of all legal moves in this position
+        - move_history: List of moves played so far (in UCI notation)
+        - side_to_move: Which side you're playing ('White' or 'Black')
         
         Args:
             board: Current chess board state
             legal_moves: List of legal moves available
-            move_history: List of moves played so far (in SAN notation)
+            move_history: List of moves played so far (in UCI notation)
             side_to_move: Which side is to move ('White' or 'Black')
             
         Returns:
             The chosen chess move
             
-        Raises:
-            IndexError: If no legal moves are available
+        Example strategies you could implement:
+        - Material counting (evaluate piece values)
+        - Position evaluation (control of center, pawn structure)
+        - Opening book moves
+        - Endgame tablebase lookups
+        - Machine learning model predictions
         """
-        # TODO: Implement your move selection logic here
-        
-        # Example: Always choose the first legal move
-        # (Replace this with your actual strategy)
+        # TODO: Implement your chess strategy here!
+        # For now, just return the first legal move (like FirstMoveAgent)
         return legal_moves[0]
-        
-        # Example: Evaluate all moves and choose the best one
-        # best_move = None
-        # best_score = float('-inf')
-        # for move in legal_moves:
-        #     # Make the move temporarily
-        #     board.push(move)
-        #     score = self.evaluate_position(board)
-        #     board.pop()
-        #     
-        #     if score > best_score:
-        #         best_score = score
-        #         best_move = move
-        # 
-        # return best_move
     
     def evaluate_position(self, board: chess.Board) -> float:
         """

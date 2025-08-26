@@ -59,9 +59,9 @@ class ChessEnvironment:
         """Get all legal moves for the current position."""
         return list(self.board.legal_moves)
 
-    def get_legal_moves_san(self) -> List[str]:
-        """Get all legal moves in Standard Algebraic Notation."""
-        return [self.board.san(move) for move in self.board.legal_moves]
+    def get_legal_moves_uci(self) -> List[str]:
+        """Get all legal moves in Universal Chess Interface (UCI) notation."""
+        return [move.uci() for move in self.board.legal_moves]
 
     def get_fen(self) -> str:
         """Get the current board position in FEN notation."""
@@ -72,7 +72,7 @@ class ChessEnvironment:
         return "White" if self.board.turn else "Black"
 
     def get_last_move(self) -> Optional[str]:
-        """Get the last move played in SAN notation."""
+        """Get the last move played in UCI notation."""
         if not self.move_history:
             return None
         return self.move_history[-1]
@@ -86,13 +86,30 @@ class ChessEnvironment:
         if not self.is_game_over():
             return None
 
-        outcome = self.board.outcome()
-        if outcome is None:
-            return "Draw"
-        elif outcome.winner is None:
-            return "Draw"
+        # Use the correct python-chess API
+        if hasattr(self.board, 'outcome'):
+            # Newer versions of python-chess
+            outcome = self.board.outcome()
+            if outcome is None:
+                return "Draw"
+            elif outcome.winner is None:
+                return "Draw"
+            else:
+                return "White wins" if outcome.winner else "Black wins"
         else:
-            return "White wins" if outcome.winner else "Black wins"
+            # Older versions of python-chess
+            if self.board.is_checkmate():
+                return "Black wins" if self.board.turn else "White wins"
+            elif self.board.is_stalemate():
+                return "Draw"
+            elif self.board.is_insufficient_material():
+                return "Draw"
+            elif self.board.is_fifty_moves():
+                return "Draw"
+            elif self.board.is_repetition():
+                return "Draw"
+            else:
+                return "Draw"
 
     def play_move(self, move: chess.Move) -> bool:
         """
@@ -105,9 +122,9 @@ class ChessEnvironment:
             True if the move was successful, False otherwise
         """
         if move in self.board.legal_moves:
-            san_move = self.board.san(move)
+            uci_move = move.uci()
             self.board.push(move)
-            self.move_history.append(san_move)
+            self.move_history.append(uci_move)
             return True
         return False
 
@@ -168,7 +185,8 @@ class ChessEnvironment:
             print(f"Initial position: {self.get_fen()}")
             print()
             # Show initial board
-            print(self.display_board(highlight_last_move=False))
+            print("Initial Position:")
+            self.renderer.render_board(self.board, output_mode="clean")
             print()
 
         while not self.is_game_over() and move_count < self.max_moves:
@@ -176,8 +194,14 @@ class ChessEnvironment:
             current_agent = self.agent1 if current_side == "White" else self.agent2
 
             if verbose:
-                print(f"\nMove {move_count + 1}: {current_side}'s turn")
-                print(f"Legal moves: {self.get_legal_moves_san()}")
+                print(f"Move {move_count + 1}: {current_side}'s turn")
+                
+                # Show legal moves (only first 5 for clarity)
+                legal_moves = self.get_legal_moves_uci()
+                display_moves = legal_moves[:5]
+                if len(legal_moves) > 5:
+                    display_moves.append(f"... and {len(legal_moves) - 5} more")
+                print(f"Legal moves: {', '.join(display_moves)}")
 
             # Get and play move
             move = self.play_agent_move(current_agent, current_side)
@@ -185,16 +209,20 @@ class ChessEnvironment:
                 # Agent failed to provide a valid move
                 result = "Black wins" if current_side == "White" else "White wins"
                 if verbose:
-                    print(f"{current_side} failed to provide a valid move. {result}")
+                    print(f"❌ {current_side} failed to provide a valid move. {result}")
                 break
 
             if verbose:
-                print(f"{current_side} plays: {self.get_last_move()}")
-                print(f"Position after move: {self.get_fen()}")
+                print(f"✅ {current_side} plays: {self.get_last_move()}")
+                
+                # Show board after move (only rich version for clarity)
+                print(f"\nPosition after {move_count + 1}. {self.get_last_move()}:")
+                self.renderer.render_board(self.board, last_move=move, output_mode="clean")
                 print()
-                # Show board after move
-                print(self.display_board(highlight_last_move=True))
-                print()
+                
+                # Show move summary
+                print(f"Move {move_count + 1}: {self.get_last_move()} | Side: {current_side} | Agent: {current_agent.__class__.__name__}")
+                print("-" * 60)
 
             move_count += 1
 
@@ -204,9 +232,9 @@ class ChessEnvironment:
             result = "Draw (max moves reached)"
 
         if verbose:
-            print(f"\nGame over: {result}")
-            print(f"Total moves: {move_count}")
-            print(f"Move history: {' '.join(self.move_history)}")
+            print(f"\n🎯 Game Over: {result}")
+            print(f"📊 Total moves: {move_count}")
+            print(f"📝 Move history: {' '.join(self.move_history)}")
 
         # Compile results
         game_stats = {
@@ -228,13 +256,28 @@ class ChessEnvironment:
         if not self.move_history:
             return ""
         
+        # Convert UCI moves to SAN for PGN export (PGN standard uses SAN)
+        san_moves = []
+        temp_board = chess.Board(self._initial_fen)
+        
+        for uci_move in self.move_history:
+            move = chess.Move.from_uci(uci_move)
+            try:
+                san_move = temp_board.san(move)
+                san_moves.append(san_move)
+                temp_board.push(move)
+            except:
+                # Fallback to UCI if SAN conversion fails
+                san_moves.append(uci_move)
+                temp_board.push(move)
+        
         pgn_lines = [
             '[Event "Chess Game"]',
             f'[White "{self.agent1.__class__.__name__}"]',
             f'[Black "{self.agent2.__class__.__name__}"]',
             '[Result "*"]',
             "",
-            " ".join(self.move_history),
+            " ".join(san_moves),
         ]
         
         return "\n".join(pgn_lines)
@@ -281,6 +324,21 @@ class ChessEnvironment:
         if not self.move_history:
             return ""
         
+        # Convert UCI moves to SAN for PGN export
+        san_moves = []
+        temp_board = chess.Board(self._initial_fen)
+        
+        for uci_move in self.move_history:
+            move = chess.Move.from_uci(uci_move)
+            try:
+                san_move = temp_board.san(move)
+                san_moves.append(san_move)
+                temp_board.push(move)
+            except:
+                # Fallback to UCI if SAN conversion fails
+                san_moves.append(uci_move)
+                temp_board.push(move)
+        
         # Basic PGN headers
         pgn_lines = [
             '[Event "Chess Game"]',
@@ -306,7 +364,7 @@ class ChessEnvironment:
         
         # Add moves
         pgn_lines.append("")
-        pgn_lines.append(" ".join(self.move_history))
+        pgn_lines.append(" ".join(san_moves))
         
         return "\n".join(pgn_lines)
     
@@ -354,12 +412,13 @@ class ChessEnvironment:
             return self._initial_fen
         return chess.STARTING_FEN
 
-    def display_board(self, highlight_last_move: bool = True) -> str:
+    def display_board(self, highlight_last_move: bool = True, clean: bool = True) -> str:
         """
         Display the current chess board using Unicode characters.
         
         Args:
             highlight_last_move: Whether to highlight the last move played
+            clean: Whether to use clean rendering (no duplicate displays)
             
         Returns:
             String representation of the chess board
@@ -370,7 +429,10 @@ class ChessEnvironment:
             if len(self.board.move_stack) > 0:
                 last_move = self.board.move_stack[-1]
         
-        return self.renderer.render_board(self.board, last_move)
+        if clean:
+            return self.renderer.render_board(self.board, last_move, output_mode="clean")
+        else:
+            return self.renderer.render_board(self.board, last_move, output_mode="auto")
     
     def display_game_state(self, show_move_history: bool = True) -> str:
         """

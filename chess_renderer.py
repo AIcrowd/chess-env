@@ -2,7 +2,7 @@
 Chess board renderer for terminal display using Unicode chess pieces.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import chess
 
@@ -61,40 +61,54 @@ class ChessRenderer:
     
     def render_board(self, board: chess.Board, 
                     last_move: Optional[chess.Move] = None,
-                    move_number: Optional[int] = None) -> str:
+                    move_number: Optional[int] = None,
+                    output_mode: str = "auto") -> Union[str, None]:
         """
-        Render a chess board to a string.
+        Render a chess board.
         
         Args:
             board: The chess board to render
             last_move: Optional last move to highlight
             move_number: Optional move number to display
+            output_mode: "auto" (smart choice), "string" (return string), 
+                        "display" (display to terminal), "clean" (no duplicates)
             
         Returns:
-            String representation of the chess board
+            String representation if output_mode is "string", None otherwise
         """
-        if self.use_rich:
-            # Rich mode: display to terminal AND return plain text
-            self._display_board_rich(board, last_move, move_number)
+        if output_mode == "string":
             return self._render_board_plain(board, last_move, move_number)
-        else:
-            return self._render_board_plain(board, last_move, move_number)
+        elif output_mode == "display":
+            if self.use_rich:
+                self._display_board_rich(board, last_move, move_number)
+            else:
+                print(self._render_board_plain(board, last_move, move_number))
+            return None
+        elif output_mode == "clean":
+            if self.use_rich:
+                self._display_board_rich(board, last_move, move_number)
+                return ""  # Return empty string to avoid duplication
+            else:
+                return self._render_board_plain(board, last_move, move_number)
+        else:  # "auto" mode
+            if self.use_rich:
+                self._display_board_rich(board, last_move, move_number)
+                return self._render_board_plain(board, last_move, move_number)
+            else:
+                return self._render_board_plain(board, last_move, move_number)
     
-    def display_board_rich(self, board: chess.Board, 
-                          last_move: Optional[chess.Move] = None,
-                          move_number: Optional[int] = None) -> None:
+    def display_board(self, board: chess.Board, 
+                     last_move: Optional[chess.Move] = None,
+                     move_number: Optional[int] = None) -> None:
         """
-        Display board using rich CLI directly to terminal (no string return).
+        Display board to terminal (convenience method).
         
         Args:
             board: The chess board to render
             last_move: Optional last move to highlight
             move_number: Optional move number to display
         """
-        if self.use_rich:
-            self._display_board_rich(board, last_move, move_number)
-        else:
-            print(self._render_board_plain(board, last_move, move_number))
+        self.render_board(board, last_move, move_number, output_mode="display")
     
     def _display_board_rich(self, board: chess.Board, 
                            last_move: Optional[chess.Move] = None,
@@ -254,7 +268,7 @@ class ChessRenderer:
         
         Args:
             board: The chess board to render
-            move_history: List of moves played so far
+            move_history: List of moves played so far (in UCI notation)
             side_to_move: Which side is to move
             game_result: Current game result if game is over
             
@@ -277,7 +291,7 @@ class ChessRenderer:
             lines.append("")
         
         # Add board
-        lines.append(self.render_board(board))
+        lines.append(self.render_board(board, output_mode="string"))
         
         # Add move history if provided
         if move_history:
@@ -294,7 +308,9 @@ class ChessRenderer:
     
     def render_move_sequence(self, board: chess.Board, 
                            moves: List[chess.Move],
-                           start_fen: str = None) -> str:
+                           start_fen: str = None,
+                           style: str = "professional",
+                           spacing: int = 2) -> str:
         """
         Render a sequence of moves showing the board after each move.
         
@@ -302,6 +318,8 @@ class ChessRenderer:
             board: The chess board to render
             moves: List of moves to show
             start_fen: Optional starting FEN position
+            style: "simple", "professional", or "fancy"
+            spacing: Number of empty lines between boards (1-5)
             
         Returns:
             String representation of the move sequence
@@ -311,29 +329,94 @@ class ChessRenderer:
         # Create a temporary board for move sequence
         temp_board = chess.Board(start_fen) if start_fen else chess.Board()
         
-        lines.append("Move sequence:")
-        lines.append("")
+        # Apply spacing constraints
+        spacing = max(1, min(5, spacing))
         
-        # Show initial position
-        if start_fen:
-            lines.append("Initial position:")
-            lines.append(self.render_board(temp_board))
+        # Choose style
+        if style == "simple":
+            lines.append("Move sequence:")
             lines.append("")
+            
+            # Show initial position
+            if start_fen:
+                lines.append("Initial position:")
+                lines.append(self._render_board_plain(temp_board))
+                lines.append("")
+            
+            # Show board after each move
+            for i, move in enumerate(moves):
+                temp_board.push(move)
+                uci_move = move.uci()
+                
+                lines.append("=" * 60)
+                lines.append(f"Move {i+1}: {uci_move}")
+                lines.append("=" * 60)
+                lines.append("")
+                
+                lines.append(self._render_board_plain(temp_board, last_move=move))
+                lines.append("")
+                
+                if i < len(moves) - 1:
+                    for _ in range(spacing):
+                        lines.append("")
         
-        # Show board after each move
-        for i, move in enumerate(moves):
-            # Make the move
-            temp_board.push(move)
-            
-            # Get move in SAN notation
-            try:
-                san_move = temp_board.san(move)
-            except:
-                san_move = move.uci()
-            
-            lines.append(f"Move {i+1}: {san_move}")
-            lines.append(self.render_board(temp_board, last_move=move))
+        elif style == "professional":
+            lines.append("🎯 MOVE SEQUENCE DISPLAY 🎯")
             lines.append("")
+            
+            # Show initial position
+            if start_fen:
+                lines.append("📍 Initial Position:")
+                lines.append(self._render_board_plain(temp_board))
+                lines.append("")
+            
+            # Show board after each move
+            for i, move in enumerate(moves):
+                temp_board.push(move)
+                uci_move = move.uci()
+                
+                lines.append("🚀" + "=" * 56 + "🚀")
+                lines.append(f"📝 Move {i+1}: {uci_move}")
+                lines.append("🚀" + "=" * 56 + "🚀")
+                lines.append("")
+                
+                lines.append(self._render_board_plain(temp_board, last_move=move))
+                lines.append("")
+                
+                if i < len(moves) - 1:
+                    for _ in range(spacing):
+                        lines.append("")
+            
+            lines.append("🏁" + "=" * 56 + "🏁")
+        
+        elif style == "fancy":
+            lines.append("✨ ✨ ✨  MOVE SEQUENCE DISPLAY  ✨ ✨ ✨")
+            lines.append("")
+            
+            # Show initial position
+            if start_fen:
+                lines.append("🌟 Initial Position:")
+                lines.append(self._render_board_plain(temp_board))
+                lines.append("")
+            
+            # Show board after each move
+            for i, move in enumerate(moves):
+                temp_board.push(move)
+                uci_move = move.uci()
+                
+                lines.append("💫" + "~" * 58 + "💫")
+                lines.append(f"🎮 Move {i+1}: {uci_move}")
+                lines.append("💫" + "~" * 58 + "💫")
+                lines.append("")
+                
+                lines.append(self._render_board_plain(temp_board, last_move=move))
+                lines.append("")
+                
+                if i < len(moves) - 1:
+                    for _ in range(spacing):
+                        lines.append("")
+            
+            lines.append("🎉" + "~" * 58 + "🎉")
         
         return "\n".join(lines)
     
@@ -363,22 +446,19 @@ class ChessRenderer:
         lines.append(f"Legal moves: {len(legal_moves)}")
         
         if legal_moves:
-            # Show first few legal moves
-            san_moves = []
+            # Show first few legal moves in UCI notation
+            uci_moves = []
             for move in legal_moves[:10]:  # Show first 10 moves
-                try:
-                    san_moves.append(board.san(move))
-                except:
-                    san_moves.append(move.uci())
+                uci_moves.append(move.uci())
             
-            lines.append(f"Sample moves: {', '.join(san_moves)}")
+            lines.append(f"Sample moves: {', '.join(uci_moves)}")
             if len(legal_moves) > 10:
                 lines.append(f"... and {len(legal_moves) - 10} more")
         
         lines.append("")
         
         # Add board
-        lines.append(self.render_board(board))
+        lines.append(self.render_board(board, output_mode="string"))
         
         return "\n".join(lines)
     

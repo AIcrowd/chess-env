@@ -28,7 +28,7 @@ class RandomAgent(ChessAgent):
         Args:
             board: Current chess board state
             legal_moves: List of legal moves available
-            move_history: List of moves played so far (in SAN notation)
+            move_history: List of moves played so far (in UCI notation)
             side_to_move: Which side is to move ('White' or 'Black')
             
         Returns:

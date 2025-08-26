@@ -1,7 +1,7 @@
 """
-First Move Agent implementation.
+First move chess agent implementation.
 
-This agent always chooses the first legal move available.
+This agent always chooses the first available legal move.
 """
 
 from typing import List
@@ -12,7 +12,7 @@ from .base import ChessAgent
 
 
 class FirstMoveAgent(ChessAgent):
-    """Agent that always chooses the first legal move."""
+    """Agent that always chooses the first available legal move."""
     
     def choose_move(
         self,
@@ -22,16 +22,16 @@ class FirstMoveAgent(ChessAgent):
         side_to_move: str,
     ) -> chess.Move:
         """
-        Choose the first legal move.
+        Choose the first available legal move.
         
         Args:
             board: Current chess board state
             legal_moves: List of legal moves available
-            move_history: List of moves played so far (in SAN notation)
+            move_history: List of moves played so far (in UCI notation)
             side_to_move: Which side is to move ('White' or 'Black')
             
         Returns:
-            The first legal move
+            The first legal move from the list
             
         Raises:
             IndexError: If no legal moves are available

@@ -244,29 +244,34 @@ def demonstrate_chess_rendering():
     print("4. Playing Some Moves:")
     print("-" * 40)
     
-    # Play e4
-    env.board.push_san("e4")
-    env.move_history = ["e4"]
-    print("After 1. e4:")
+    # Play e4 using UCI notation
+    env.board.push(chess.Move.from_uci("e2e4"))
+    env.move_history = ["e2e4"]
+    print("After 1. e2e4:")
     print(env.display_board(highlight_last_move=True))
     print()
     
-    # Play e5
-    env.board.push_san("e5")
-    env.move_history = ["e4", "e5"]
-    print("After 1. e4 2. e5:")
+    # Play e5 using UCI notation
+    env.board.push(chess.Move.from_uci("e7e5"))
+    env.move_history = ["e2e4", "e7e5"]
+    print("After 1. e2e4 2. e7e5:")
     print(env.display_board(highlight_last_move=True))
     print()
     
     # Show move sequence
     print("5. Move Sequence Display:")
     print("-" * 40)
+    
+    # Use consolidated move sequence display with professional style and maximum spacing
     moves = [
         chess.Move.from_uci("e2e4"),
         chess.Move.from_uci("e7e5"),
         chess.Move.from_uci("g1f3")
     ]
-    print(env.display_move_sequence(moves))
+    
+    print("Using professional move sequence display with maximum spacing...")
+    # Use the consolidated method with professional style and 4-line spacing
+    print(env.renderer.render_move_sequence(env.board, moves, style="professional", spacing=4))
     
     # Test renderer options
     print("6. Renderer Options:")
@@ -325,17 +330,94 @@ def demonstrate_chess_rendering():
     print(custom_env.display_position_analysis())
 
 
+def demonstrate_clean_game():
+    """Demonstrate a clean, easy-to-follow game display."""
+    print("\n=== Clean Game Demo ===\n")
+    
+    # Create environment with clean display
+    env = ChessEnvironment(RandomAgent(), FirstMoveAgent(), max_moves=10, time_limit=1.0)
+    
+    print("Playing a clean, easy-to-follow game...")
+    print("=" * 60)
+    
+    # Custom game display function
+    def play_clean_game():
+        env.reset()
+        move_count = 0
+        
+        # Show initial position
+        print("Initial Position:")
+        print(env.display_board())
+        print()
+        
+        while not env.is_game_over() and move_count < env.max_moves:
+            current_side = env.get_side_to_move()
+            current_agent = env.agent1 if current_side == "White" else env.agent2
+            
+            # Get legal moves (show only first 5 for clarity)
+            legal_moves = env.get_legal_moves_uci()
+            display_moves = legal_moves[:5]
+            if len(legal_moves) > 5:
+                display_moves.append(f"... and {len(legal_moves) - 5} more")
+            
+            print(f"Move {move_count + 1}: {current_side}'s turn")
+            print(f"Legal moves: {', '.join(display_moves)}")
+            
+            # Get and play move
+            move = env.play_agent_move(current_agent, current_side)
+            if move is None:
+                print(f"❌ {current_side} failed to provide a valid move")
+                break
+            
+            # Show the move played
+            print(f"✅ {current_side} plays: {move.uci()}")
+            
+            # Show board after move (only rich version for clarity)
+            print(f"\nPosition after {move_count + 1}. {move.uci()}:")
+            env.renderer.render_board(env.board, last_move=move, output_mode="clean")
+            print()
+            
+            # Show move summary
+            print(f"Move {move_count + 1}: {move.uci()} | Side: {current_side} | Agent: {current_agent.__class__.__name__}")
+            print("-" * 60)
+            
+            move_count += 1
+        
+        # Game ended
+        result = env.get_game_result()
+        if result is None:
+            result = "Draw (max moves reached)"
+        
+        print(f"\n🎯 Game Over: {result}")
+        print(f"📊 Total moves: {move_count}")
+        print(f"📝 Move history: {' '.join(env.move_history)}")
+        
+        return {
+            "result": result,
+            "moves_played": move_count,
+            "move_history": env.move_history.copy()
+        }
+    
+    # Play the clean game
+    result = play_clean_game()
+    
+    return result
+
+
 def main():
     """Run all demonstrations."""
     print("Chess Environment Demonstrations")
     print("=" * 40)
     
     try:
+        # Clean game demo (most important)
+        result1 = demonstrate_clean_game()
+        
         # Basic usage
-        result1 = demonstrate_basic_usage()
+        result2 = demonstrate_basic_usage()
         
         # Multiple games
-        results2 = demonstrate_multiple_games()
+        results3 = demonstrate_multiple_games()
         
         # Custom positions
         demonstrate_custom_positions()
