@@ -3,11 +3,14 @@
 Example script demonstrating the chess environment usage.
 """
 
+import os
+
 import chess
 from agents import (
     ChessAgent,
     FirstMoveAgent,
     LastMoveAgent,
+    OpenAIAgent,
     RandomAgent,
     StockfishAgent,
 )
@@ -348,6 +351,115 @@ def demonstrate_stockfish_agent():
         return False
 
 
+def demonstrate_openai_agent():
+    """Demonstrate the OpenAI agent functionality."""
+    print("\n=== OpenAI Agent Demo ===\n")
+    
+    try:
+        # Check if OpenAI API key is available
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            print("❌ OpenAI API key not available")
+            print("   To use OpenAI agent, please set the OPENAI_API_KEY environment variable:")
+            print("   export OPENAI_API_KEY='your-api-key-here'")
+            print()
+            print("   For now, continuing with other demonstrations...")
+            return False
+        
+        print("1. Testing OpenAI API connection...")
+        openai_agent = OpenAIAgent(api_key=api_key, model="gpt-5-mini", temperature=0.1)
+        
+        if openai_agent.test_connection():
+            print("✅ OpenAI API connection successful")
+        else:
+            print("❌ OpenAI API connection failed")
+            return False
+        
+        print(f"   Model: {openai_agent.model}")
+        print(f"   Temperature: {openai_agent.temperature}")
+        print(f"   Max tokens: {openai_agent.max_tokens}")
+        print()
+        
+        # Test prompt template functionality
+        print("2. Testing prompt template functionality...")
+        print("   Current prompt template:")
+        print("   " + "-" * 50)
+        print(openai_agent.get_prompt_template())
+        print("   " + "-" * 50)
+        print()
+        
+        # Test custom prompt template
+        print("3. Testing custom prompt template...")
+        custom_template = """You are a chess expert. Choose the best move from the available options.
+
+Current board state:
+{board_utf}
+
+Board position (FEN): {FEN}
+Last move: {last_move}
+Legal moves available (UCI): {legal_moves_uci}
+Legal moves available (SAN): {legal_moves_san}
+Move history (UCI): {move_history_uci}
+Move history (SAN): {move_history_san}
+It is your turn as {side_to_move}.
+
+Please respond with your chosen move wrapped in <uci_move></uci_move> tags.
+For example: <uci_move>e2e4</uci_move> or <uci_move>g1f3</uci_move>
+
+If you cannot find a good move, respond with <uci_move>resign</uci_move>"""
+        
+        openai_agent.update_prompt_template(custom_template)
+        print("✅ Custom prompt template updated")
+        print()
+        
+        # Test generation parameters
+        print("4. Testing generation parameters...")
+        openai_agent.update_generation_params(temperature=0.0, max_completion_tokens=20)
+        print("✅ Generation parameters updated")
+        print(f"   New temperature: {openai_agent.temperature}")
+        print(f"   New max completion tokens: {openai_agent.max_tokens}")
+        print()
+        
+        # Test fallback behavior configuration
+        print("5. Testing fallback behavior...")
+        print(f"   Current fallback behavior: {openai_agent.get_fallback_behavior()}")
+        
+        # Test updating fallback behavior
+        openai_agent.update_fallback_behavior("resign")
+        print(f"   Updated fallback behavior: {openai_agent.get_fallback_behavior()}")
+        
+        # Reset to default
+        openai_agent.update_fallback_behavior("random_move")
+        print(f"   Reset fallback behavior: {openai_agent.get_fallback_behavior()}")
+        print()
+        
+        # Test move selection (without playing a full game to save API calls)
+        print("6. Testing move selection...")
+        board = chess.Board()
+        legal_moves = list(board.legal_moves)
+        
+        print(f"   Starting position, legal moves: {len(legal_moves)}")
+        print(f"   Sample legal moves: {[board.san(move) for move in legal_moves[:5]]}")
+        
+        # Test prompt formatting
+        prompt = openai_agent._format_prompt(board, legal_moves, [], "White")
+        print("   Generated prompt preview:")
+        print("   " + "-" * 50)
+        print(prompt[:200] + "..." if len(prompt) > 200 else prompt)
+        print("   " + "-" * 50)
+        print()
+        
+        print("✅ OpenAI agent demonstration completed successfully!")
+        print("   Note: This agent requires an OpenAI API key and will make API calls.")
+        print("   For production use, consider fine-tuning your own model.")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ OpenAI agent demonstration failed: {e}")
+        return False
+
+
 def demonstrate_chess_rendering():
     """Demonstrate the new chess board rendering functionality."""
     print("\n=== Chess Board Rendering Demo ===\n")
@@ -564,12 +676,17 @@ def main():
         # Stockfish agent (if available)
         stockfish_success = demonstrate_stockfish_agent()
         
+        # OpenAI agent (if API key available)
+        openai_success = demonstrate_openai_agent()
+        
         # Chess rendering
         demonstrate_chess_rendering()
         
         print("\n=== All demonstrations completed successfully! ===")
         if not stockfish_success:
             print("Note: Stockfish agent demonstration was skipped due to missing Stockfish binary.")
+        if not openai_success:
+            print("Note: OpenAI agent demonstration was skipped due to missing API key.")
         
     except Exception as e:
         print(f"\nError during demonstration: {e}")

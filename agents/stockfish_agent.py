@@ -9,9 +9,14 @@ import platform
 import subprocess
 from typing import Any, Dict, List, Optional
 
+from dotenv import load_dotenv
+
 import chess
 
 from .base import ChessAgent
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class StockfishAgent(ChessAgent):
