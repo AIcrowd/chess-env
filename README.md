@@ -1,23 +1,28 @@
 # Chess Environment
 
-A Python-based chess environment for running games between AI agents, built according to the AIcrowd Chess Challenge specifications.
+A Python-based chess environment for running games between AI agents, built according to the AIcrowd Chess Challenge specifications. Features enhanced game termination detection, flexible prompt templates, and comprehensive PGN export capabilities.
 
 ## Features
 
 - **Two-player chess games** between agent classes
 - **Abstract agent interface** for easy implementation of different strategies
-- **Random agent implementation** as a baseline
+- **Multiple agent implementations** including Random, FirstMove, LastMove, Stockfish, and OpenAI agents
 - **Modular agent architecture** in separate `agents/` folder for easy extension
+- **Enhanced game termination detection** (checkmate, stalemate, insufficient material, fifty-move rule, threefold repetition)
 - **Comprehensive game state tracking** including FEN notation, move history, and PGN output
+- **Flexible prompt template system** for OpenAI agents with customizable placeholders
+- **Advanced PGN export** with metadata, termination reasons, and game statistics
+- **Rich chess board rendering** with Unicode pieces and optional Rich CLI styling
 - **Configurable game parameters** (max moves, time limits)
 - **Built-in validation** and error handling
-- **Test suite** for safe development and updates
+- **Comprehensive test suite** for safe development and updates
 
 ## Requirements
 
 - Python 3.8+
 - `python-chess` - Chess board representation and game logic
-- `Chessnut` - Chess engine integration
+- `stockfish` - Stockfish chess engine integration
+- `openai` - OpenAI API integration for GPT-based agents
 - `rich` - Enhanced terminal rendering with colors and styling (optional, falls back to plain text)
 
 ## Installation
@@ -78,8 +83,8 @@ OPENAI_FALLBACK_BEHAVIOR=random_move # Fallback when parsing fails (random_move/
 
 **Model Selection:**
 - **`gpt-5-mini`** (default): Balanced performance and cost, recommended for most use cases
-- **`gpt-3.5-turbo`**: Faster and cheaper, good for development and testing
-- **`gpt-4`**: Highest quality, most expensive, best for production use
+- **`gpt-4o-mini`**: Faster and cheaper, good for development and testing
+- **`gpt-5`**: Highest quality, most expensive
 
 **Fallback Behavior:**
 - **`random_move`** (default): Choose a random legal move if parsing fails
@@ -162,7 +167,35 @@ result = env.play_game(verbose=True)
 # Get game results
 print(f"Result: {result['result']}")
 print(f"Moves played: {result['moves_played']}")
+print(f"Game over reason: {result['game_over_reason']}")
 ```
+
+### Complete Gameplay Examples
+
+The repository includes two comprehensive example files:
+
+#### `example.py` - Comprehensive Feature Demonstration
+```bash
+python example.py
+```
+Demonstrates all available features including:
+- Basic environment usage
+- Multiple games and statistics
+- Custom starting positions (FEN)
+- PGN export with metadata
+- Agent analysis and comparison
+- Game termination scenarios
+
+#### `example_game.py` - OpenAI vs Stockfish Gameplay
+```bash
+python example_game.py
+```
+Shows a complete game between OpenAI and Stockfish agents:
+- Template customization and management
+- Random color assignment
+- Dynamic template switching
+- Enhanced game display
+- PGN export to `game.pgn`
 
 ### Using the OpenAI Agent
 
@@ -183,6 +216,8 @@ env = ChessEnvironment(openai_agent, random_agent, max_moves=30)
 result = env.play_game(verbose=True)
 
 print(f"OpenAI Agent result: {result['result']}")
+print(f"Game over reason: {result['game_over_reason']}")
+print(f"Total moves: {result['moves_played']}")
 ```
 
 **Customizing the OpenAI Agent:**
@@ -199,10 +234,10 @@ openai_agent = OpenAIAgent(
 custom_prompt = """You are a chess expert. Choose the best move.
 
 Position: {FEN}
-Moves: {legal_moves}
+Moves: {legal_moves_uci}
 Your turn: {side_to_move}
 
-Respond with only the move in SAN notation."""
+Respond with your move in UCI notation wrapped in <uci_move></uci_move> tags."""
 
 openai_agent.update_prompt_template(custom_prompt)
 ```
@@ -304,11 +339,18 @@ success = env.export_pgn_file("tournament_game", include_metadata=True)
 
 # Export without metadata (minimal PGN)
 success = env.export_pgn_file("simple_game", include_metadata=False)
+
+# Generate PGN content directly
+pgn_content = env._generate_pgn_content(include_metadata=True)
+with open("game.pgn", "w") as f:
+    f.write(pgn_content)
 ```
 
 **PGN Export Features:**
 - **Automatic file extension**: Adds `.pgn` if not provided
 - **Rich metadata**: Includes game result, termination reason, move count, FEN positions
+- **Enhanced termination detection**: Specific reasons (checkmate, stalemate, insufficient material, fifty-move rule, threefold repetition)
+- **Game statistics**: Move count, initial and final FEN positions, agent names
 - **Custom positions**: Preserves initial FEN for non-standard starting positions
 - **Standard format**: Compatible with chess analysis software (Lichess, Chess.com, etc.)
 - **Error handling**: Returns success/failure status with informative error messages
@@ -353,6 +395,7 @@ env.set_renderer_options(
 - **Position analysis**: Material count, legal moves, and sample moves
 - **Move sequences**: Step-by-step visualization of move sequences
 - **Custom positions**: Works with any FEN position
+- **Clean mode**: Option to avoid duplicate output when using Rich CLI
 
 **Rendering Configuration:**
 - **Empty Square Characters**: Choose from `·` (dot), `.` (period), `-` (dash), ` ` (space), or any custom character
@@ -389,10 +432,10 @@ class MyCustomAgent(ChessAgent):
     def choose_move(self, board, legal_moves, move_history, side_to_move):
         # Implement your move selection logic here
         # For example, always choose the first legal move
-        return legal_moves[0]
+        return legal_moves[0], "First legal move"
         
         # Or implement a more sophisticated strategy
-        # return self.evaluate_position(board, legal_moves)
+        # return self.evaluate_position(board, legal_moves), "Strategic move"
 ```
 
 ### Available Agents
@@ -402,8 +445,8 @@ The `agents/` package includes several pre-implemented agents:
 - **`RandomAgent`**: Chooses moves randomly (baseline implementation)
 - **`FirstMoveAgent`**: Always chooses the first legal move
 - **`LastMoveAgent`**: Always chooses the last legal move
-- **`StockfishAgent`**: Uses the Stockfish chess engine for strong play
-- **`OpenAIAgent`**: Uses OpenAI's GPT models for intelligent move selection
+- **`StockfishAgent`**: Uses the Stockfish chess engine for strong play with configurable skill levels
+- **`OpenAIAgent`**: Uses OpenAI's GPT models with flexible prompt templates and UCI move parsing
 
 ### Agent Package Structure
 
@@ -452,17 +495,20 @@ The `ChessEnvironment` class provides several useful methods:
 
 - `reset(fen)`: Reset to a new position (default: starting position)
 - `get_legal_moves()`: Get all legal moves for current position
+- `get_legal_moves_uci()`: Get legal moves in UCI notation
 - `get_fen()`: Get current board position in FEN notation
 - `get_side_to_move()`: Get whose turn it is
-- `play_move(move)`: Play a specific move
+- `get_game_termination_reason()`: Get specific reason for game ending
+- `play_move(move, comment)`: Play a specific move with optional comment
 - `play_game(verbose)`: Play a complete game
 - `get_pgn()`: Get the game in PGN format
 - `export_pgn_file(filename, include_metadata)`: Export game to PGN file
-- `display_board(highlight_last_move)`: Display chess board using Unicode pieces
+- `_generate_pgn_content(include_metadata)`: Generate PGN content with enhanced metadata
+- `display_board(highlight_last_move, clean)`: Display chess board using Unicode pieces
 - `display_game_state(show_move_history)`: Display complete game state
 - `display_position_analysis()`: Display position analysis with material count
 - `display_move_sequence(moves, start_fen)`: Display sequence of moves
-- `set_renderer_options(show_coordinates, show_move_numbers)`: Configure display options
+- `set_renderer_options(show_coordinates, show_move_numbers, empty_square_char, use_rich)`: Configure display options
 
 **Constructor Parameters:**
 - `agent1`, `agent2`: The two chess agents to play
@@ -515,6 +561,10 @@ pytest --cov=env --cov-report=html
 ```bash
 pytest tests/test_environment.py
 pytest tests/test_agents.py
+pytest tests/test_openai_agent.py
+pytest tests/test_stockfish_agent.py
+pytest tests/test_chess_renderer.py
+pytest tests/test_integration.py
 ```
 
 ### Run Tests with Verbose Output
@@ -529,6 +579,8 @@ pytest -v
 chess/
 ├── env.py                 # Main chess environment
 ├── chess_renderer.py      # Chess board renderer with Unicode pieces
+├── example.py             # Comprehensive feature demonstration
+├── example_game.py        # OpenAI vs Stockfish gameplay example
 ├── requirements.txt       # Python dependencies
 ├── README.md             # This file
 ├── agents/               # Chess agent implementations
@@ -537,14 +589,20 @@ chess/
 │   ├── random_agent.py   # Random move selection agent
 │   ├── first_move_agent.py # First move selection agent
 │   ├── last_move_agent.py  # Last move selection agent
+│   ├── stockfish_agent.py  # Stockfish chess engine integration
+│   ├── openai_agent.py     # OpenAI GPT model integration
 │   └── template_agent.py # Template for new agents
+├── docs/                 # Documentation
+│   └── OPENAI_AGENT.md   # OpenAI agent detailed documentation
 ├── tests/                # Test suite
 │   ├── __init__.py
 │   ├── test_environment.py
 │   ├── test_agents.py
-│   ├── test_new_agents.py
+│   ├── test_openai_agent.py
+│   ├── test_stockfish_agent.py
 │   ├── test_chess_renderer.py
-│   └── test_integration.py
+│   ├── test_integration.py
+│   └── test_new_agents.py
 └── chess_env/
     └── SPEC.md           # Technical specification
 ```

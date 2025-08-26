@@ -3,7 +3,7 @@ Base chess agent abstract class.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Union, Tuple
+from typing import List, Tuple, Union
 
 import chess
 

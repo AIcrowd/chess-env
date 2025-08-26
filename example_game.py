@@ -41,7 +41,7 @@ def main():
     # Create agents
     print("Creating agents...")
     openai_agent = OpenAIAgent(
-        model="gpt-4o-mini",  # Use GPT-4o-mini model
+        model="gpt-5-mini",  # Use GPT-5-mini model
         max_completion_tokens=500  # Short responses for moves
     )
     
