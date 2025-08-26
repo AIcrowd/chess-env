@@ -1,7 +1,8 @@
 import pytest
 
 import chess
-from env import ChessEnvironment, RandomAgent
+from agents import RandomAgent
+from env import ChessEnvironment
 
 
 class TestChessEnvironment:
@@ -254,6 +255,151 @@ class TestChessEnvironment:
         assert '[White "RandomAgent"]' in pgn
         assert '[Black "RandomAgent"]' in pgn
         assert "e4 e5" in pgn
+
+    def test_export_pgn_file_basic(self):
+        """Test basic PGN file export."""
+        # Play some moves first
+        self.env.board.push_san("e4")
+        self.env.board.push_san("e5")
+        self.env.move_history = ["e4", "e5"]
+        
+        # Test export
+        filename = "test_game.pgn"
+        success = self.env.export_pgn_file(filename)
+        
+        assert success
+        
+        # Verify file was created and contains expected content
+        import os
+        assert os.path.exists(filename)
+        
+        with open(filename, 'r') as f:
+            content = f.read()
+            assert '[Event "Chess Game"]' in content
+            assert '[White "RandomAgent"]' in content
+            assert '[Black "RandomAgent"]' in content
+            assert "e4 e5" in content
+        
+        # Clean up
+        os.remove(filename)
+    
+    def test_export_pgn_file_with_metadata(self):
+        """Test PGN file export with metadata."""
+        # Play some moves first
+        self.env.board.push_san("e4")
+        self.env.board.push_san("e5")
+        self.env.move_history = ["e4", "e5"]
+        
+        # Test export with metadata
+        filename = "test_game_metadata.pgn"
+        success = self.env.export_pgn_file(filename, include_metadata=True)
+        
+        assert success
+        
+        # Verify file contains metadata
+        with open(filename, 'r') as f:
+            content = f.read()
+            assert '[WhiteType "program"]' in content
+            assert '[BlackType "program"]' in content
+            assert '[Termination "unterminated"]' in content  # Game is not over yet
+            assert '[Moves "2"]' in content
+            assert '[InitialFEN' in content
+            assert '[FinalFEN' in content
+        
+        # Clean up
+        import os
+        os.remove(filename)
+    
+    def test_export_pgn_file_without_metadata(self):
+        """Test PGN file export without metadata."""
+        # Play some moves first
+        self.env.board.push_san("e4")
+        self.env.board.push_san("e5")
+        self.env.move_history = ["e4", "e5"]
+        
+        # Test export without metadata
+        filename = "test_game_no_metadata.pgn"
+        success = self.env.export_pgn_file(filename, include_metadata=False)
+        
+        assert success
+        
+        # Verify file doesn't contain metadata
+        with open(filename, 'r') as f:
+            content = f.read()
+            assert '[WhiteType "program"]' not in content
+            assert '[BlackType "program"]' not in content
+            assert '[Termination "normal"]' not in content
+            assert '[Moves "2"]' not in content
+            assert '[InitialFEN' not in content
+            assert '[FinalFEN' not in content
+        
+        # Clean up
+        import os
+        os.remove(filename)
+    
+    def test_export_pgn_file_auto_extension(self):
+        """Test that PGN export automatically adds .pgn extension."""
+        # Play some moves first
+        self.env.board.push_san("e4")
+        self.env.move_history = ["e4"]
+        
+        # Test export without .pgn extension
+        filename = "test_game"
+        success = self.env.export_pgn_file(filename)
+        
+        assert success
+        
+        # Verify file was created with .pgn extension
+        import os
+        expected_filename = "test_game.pgn"
+        assert os.path.exists(expected_filename)
+        
+        # Clean up
+        os.remove(expected_filename)
+    
+    def test_export_pgn_file_empty_game(self):
+        """Test PGN export for empty game."""
+        # Test export with no moves
+        filename = "empty_game.pgn"
+        success = self.env.export_pgn_file(filename)
+        
+        assert success
+        
+        # Verify file was created but contains minimal content
+        import os
+        assert os.path.exists(filename)
+        
+        with open(filename, 'r') as f:
+            content = f.read()
+            assert content.strip() == ""
+        
+        # Clean up
+        os.remove(filename)
+    
+    def test_export_pgn_file_custom_position(self):
+        """Test PGN export for custom starting position."""
+        # Create environment with custom position
+        custom_fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+        env = ChessEnvironment(self.agent1, self.agent2, initial_fen=custom_fen)
+        
+        # Play a move
+        env.board.push_san("Nf6")
+        env.move_history = ["Nf6"]
+        
+        # Test export
+        filename = "custom_position_game.pgn"
+        success = env.export_pgn_file(filename)
+        
+        assert success
+        
+        # Verify file contains custom FEN
+        with open(filename, 'r') as f:
+            content = f.read()
+            assert custom_fen in content
+        
+        # Clean up
+        import os
+        os.remove(filename)
 
     def test_environment_state_consistency(self):
         """Test that environment state remains consistent."""

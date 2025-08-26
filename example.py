@@ -4,21 +4,8 @@ Example script demonstrating the chess environment usage.
 """
 
 import chess
-from env import ChessAgent, ChessEnvironment, RandomAgent
-
-
-class FirstMoveAgent(ChessAgent):
-    """Agent that always chooses the first legal move."""
-    
-    def choose_move(self, board, legal_moves, move_history, side_to_move):
-        return legal_moves[0]
-
-
-class LastMoveAgent(ChessAgent):
-    """Agent that always chooses the last legal move."""
-    
-    def choose_move(self, board, legal_moves, move_history, side_to_move):
-        return legal_moves[-1]
+from agents import ChessAgent, FirstMoveAgent, LastMoveAgent, RandomAgent
+from env import ChessEnvironment
 
 
 def demonstrate_basic_usage():
@@ -162,6 +149,74 @@ def demonstrate_fen_initialization():
         print()
 
 
+def demonstrate_pgn_export():
+    """Demonstrate the new PGN export functionality."""
+    print("\n=== PGN Export Demo ===\n")
+    
+    # Create a simple game
+    env = ChessEnvironment(RandomAgent(), FirstMoveAgent(), max_moves=10)
+    
+    # Play a short game
+    print("Playing a short game for PGN export...")
+    result = env.play_game(verbose=False)
+    print(f"Game completed: {result['result']} in {result['moves_played']} moves")
+    
+    # Export to PGN file
+    filename = "demo_game"
+    print(f"\nExporting game to {filename}.pgn...")
+    
+    success = env.export_pgn_file(filename)
+    if success:
+        print(f"✅ Successfully exported to {filename}.pgn")
+        
+        # Show the PGN content
+        print("\nPGN Content:")
+        print("-" * 40)
+        with open(f"{filename}.pgn", 'r') as f:
+            content = f.read()
+            print(content)
+        print("-" * 40)
+        
+        # Clean up
+        import os
+        os.remove(f"{filename}.pgn")
+        print(f"🗑️  Cleaned up {filename}.pgn")
+    else:
+        print("❌ Failed to export PGN file")
+    
+    # Test export with custom position
+    print(f"\nTesting PGN export with custom starting position...")
+    custom_env = ChessEnvironment(
+        RandomAgent(), 
+        FirstMoveAgent(), 
+        max_moves=5,
+        initial_fen="rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+    )
+    
+    # Play a few moves
+    custom_env.play_game(verbose=False)
+    
+    # Export with metadata
+    custom_filename = "custom_position_game"
+    success = custom_env.export_pgn_file(custom_filename, include_metadata=True)
+    
+    if success:
+        print(f"✅ Successfully exported custom position game to {custom_filename}.pgn")
+        
+        # Show metadata
+        with open(f"{custom_filename}.pgn", 'r') as f:
+            content = f.read()
+            if '[InitialFEN' in content and '[FinalFEN' in content:
+                print("✅ PGN includes custom position metadata")
+        
+        # Clean up
+        import os
+        os.remove(f"{custom_filename}.pgn")
+        print(f"🗑️  Cleaned up {custom_filename}.pgn")
+    else:
+        print("❌ Failed to export custom position PGN file")
+
+
 def main():
     """Run all demonstrations."""
     print("Chess Environment Demonstrations")
@@ -179,6 +234,9 @@ def main():
         
         # FEN initialization
         demonstrate_fen_initialization()
+
+        # PGN export
+        demonstrate_pgn_export()
         
         # Agent analysis
         demonstrate_agent_analysis()

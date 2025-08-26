@@ -5,35 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import chess
 import chess.engine
-
-
-class ChessAgent(ABC):
-    """Abstract base class for chess agents."""
-
-    @abstractmethod
-    def choose_move(
-        self,
-        board: chess.Board,
-        legal_moves: List[chess.Move],
-        move_history: List[str],
-        side_to_move: str,
-    ) -> chess.Move:
-        """Choose a move from the given legal moves."""
-        pass
-
-
-class RandomAgent(ChessAgent):
-    """Simple agent that chooses random legal moves."""
-
-    def choose_move(
-        self,
-        board: chess.Board,
-        legal_moves: List[chess.Move],
-        move_history: List[str],
-        side_to_move: str,
-    ) -> chess.Move:
-        """Choose a random move from the legal moves."""
-        return random.choice(legal_moves)
+from agents import ChessAgent, RandomAgent
 
 
 class ChessEnvironment:
@@ -67,13 +39,17 @@ class ChessEnvironment:
         
         # Set initial position if provided
         if initial_fen is not None:
+            self._initial_fen = initial_fen
             self.reset(initial_fen)
+        else:
+            self._initial_fen = chess.STARTING_FEN
 
     def reset(self, fen: str = chess.STARTING_FEN):
         """Reset the board to a new position."""
         self.board = chess.Board(fen)
         self.move_history = []
         self.game_result = None
+        self._initial_fen = fen
 
     def get_legal_moves(self) -> List[chess.Move]:
         """Get all legal moves for the current position."""
@@ -241,7 +217,7 @@ class ChessEnvironment:
         """Get the game in PGN format."""
         if not self.move_history:
             return ""
-
+        
         pgn_lines = [
             '[Event "Chess Game"]',
             f'[White "{self.agent1.__class__.__name__}"]',
@@ -250,8 +226,123 @@ class ChessEnvironment:
             "",
             " ".join(self.move_history),
         ]
-
+        
         return "\n".join(pgn_lines)
+
+    def export_pgn_file(self, filename: str, include_metadata: bool = True) -> bool:
+        """
+        Export the game to a PGN file.
+        
+        Args:
+            filename: Name of the file to save (with or without .pgn extension)
+            include_metadata: Whether to include additional metadata in the PGN
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Ensure filename has .pgn extension
+            if not filename.endswith('.pgn'):
+                filename += '.pgn'
+            
+            # Generate PGN content
+            pgn_content = self._generate_pgn_content(include_metadata)
+            
+            # Write to file
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(pgn_content)
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error exporting PGN file: {e}")
+            return False
+    
+    def _generate_pgn_content(self, include_metadata: bool = True) -> str:
+        """
+        Generate PGN content with optional metadata.
+        
+        Args:
+            include_metadata: Whether to include additional metadata
+            
+        Returns:
+            Formatted PGN string
+        """
+        if not self.move_history:
+            return ""
+        
+        # Basic PGN headers
+        pgn_lines = [
+            '[Event "Chess Game"]',
+            f'[Site "Chess Environment"]',
+            f'[Date "{self._get_current_date()}"]',
+            f'[Round "1"]',
+            f'[White "{self.agent1.__class__.__name__}"]',
+            f'[Black "{self.agent2.__class__.__name__}"]',
+            f'[Result "{self._get_pgn_result()}"]',
+        ]
+        
+        # Add optional metadata
+        if include_metadata:
+            pgn_lines.extend([
+                f'[WhiteType "program"]',
+                f'[BlackType "program"]',
+                f'[TimeControl "-"]',
+                f'[Termination "{self._get_termination_reason()}"]',
+                f'[Moves "{len(self.move_history)}"]',
+                f'[InitialFEN "{self._get_initial_fen()}"]',
+                f'[FinalFEN "{self.get_fen()}"]',
+            ])
+        
+        # Add moves
+        pgn_lines.append("")
+        pgn_lines.append(" ".join(self.move_history))
+        
+        return "\n".join(pgn_lines)
+    
+    def _get_current_date(self) -> str:
+        """Get current date in PGN format (YYYY.MM.DD)."""
+        import datetime
+        now = datetime.datetime.now()
+        return now.strftime("%Y.%m.%d")
+    
+    def _get_pgn_result(self) -> str:
+        """Get PGN result string."""
+        if not self.is_game_over():
+            return "*"
+        
+        result = self.get_game_result()
+        if result == "White wins":
+            return "1-0"
+        elif result == "Black wins":
+            return "0-1"
+        elif result == "Draw":
+            return "1/2-1/2"
+        else:
+            return "*"
+    
+    def _get_termination_reason(self) -> str:
+        """Get termination reason for PGN."""
+        if not self.is_game_over():
+            return "unterminated"
+        
+        result = self.get_game_result()
+        if "checkmate" in result.lower():
+            return "checkmate"
+        elif "stalemate" in result.lower():
+            return "stalemate"
+        elif "draw" in result.lower():
+            return "draw"
+        else:
+            return "normal"
+    
+    def _get_initial_fen(self) -> str:
+        """Get the initial FEN position."""
+        # If we have a custom starting position, return it
+        # Otherwise return the standard starting position
+        if hasattr(self, '_initial_fen') and self._initial_fen != chess.STARTING_FEN:
+            return self._initial_fen
+        return chess.STARTING_FEN
 
 
 def main():

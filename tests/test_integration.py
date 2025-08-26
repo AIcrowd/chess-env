@@ -1,7 +1,8 @@
 import pytest
 
 import chess
-from env import ChessAgent, ChessEnvironment, RandomAgent
+from agents import ChessAgent, RandomAgent
+from env import ChessEnvironment
 
 
 class TestIntegration:

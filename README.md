@@ -7,6 +7,7 @@ A Python-based chess environment for running games between AI agents, built acco
 - **Two-player chess games** between agent classes
 - **Abstract agent interface** for easy implementation of different strategies
 - **Random agent implementation** as a baseline
+- **Modular agent architecture** in separate `agents/` folder for easy extension
 - **Comprehensive game state tracking** including FEN notation, move history, and PGN output
 - **Configurable game parameters** (max moves, time limits)
 - **Built-in validation** and error handling
@@ -14,8 +15,9 @@ A Python-based chess environment for running games between AI agents, built acco
 
 ## Installation
 
-1. **Activate the chess conda environment:**
+1. **Create and Activate the chess conda environment:**
    ```bash
+   conda create python=3.11 --name chess
    conda activate chess
    ```
 
@@ -63,12 +65,37 @@ env = ChessEnvironment(agent1, agent2, initial_fen=endgame_fen)
 result = env.play_game(verbose=True)
 ```
 
+### Exporting Games to PGN Files
+
+You can export completed games to PGN (Portable Game Notation) files for analysis or sharing:
+
+```python
+# Play a game
+result = env.play_game(verbose=False)
+
+# Export to PGN file (automatically adds .pgn extension)
+success = env.export_pgn_file("my_game")
+
+# Export with custom metadata
+success = env.export_pgn_file("tournament_game", include_metadata=True)
+
+# Export without metadata (minimal PGN)
+success = env.export_pgn_file("simple_game", include_metadata=False)
+```
+
+**PGN Export Features:**
+- **Automatic file extension**: Adds `.pgn` if not provided
+- **Rich metadata**: Includes game result, termination reason, move count, FEN positions
+- **Custom positions**: Preserves initial FEN for non-standard starting positions
+- **Standard format**: Compatible with chess analysis software (Lichess, Chess.com, etc.)
+- **Error handling**: Returns success/failure status with informative error messages
+
 ### Creating Custom Agents
 
 To create your own chess agent, inherit from the `ChessAgent` abstract base class:
 
 ```python
-from env import ChessAgent
+from agents import ChessAgent
 import chess
 import random
 
@@ -82,6 +109,53 @@ class MyCustomAgent(ChessAgent):
         # return self.evaluate_position(board, legal_moves)
 ```
 
+### Available Agents
+
+The `agents/` package includes several pre-implemented agents:
+
+- **`RandomAgent`**: Chooses moves randomly (baseline implementation)
+- **`FirstMoveAgent`**: Always chooses the first legal move
+- **`LastMoveAgent`**: Always chooses the last legal move
+
+### Agent Package Structure
+
+```
+agents/
+├── __init__.py          # Package exports
+├── base.py              # Abstract ChessAgent base class
+├── random_agent.py      # Random move selection
+├── first_move_agent.py  # First move selection
+├── last_move_agent.py   # Last move selection
+├── template_agent.py    # Template for new agents
+└── ...                  # Future agent implementations
+```
+
+### Adding New Agent Types
+
+1. **Create a new file** in the `agents/` folder (e.g., `my_agent.py`)
+2. **Inherit from `ChessAgent`** and implement the `choose_move` method
+3. **Add to `agents/__init__.py`** to make it available for import
+4. **Write tests** in the `tests/` folder
+5. **Update documentation** as needed
+
+Example of a new agent:
+
+```python
+# agents/my_agent.py
+from .base import ChessAgent
+
+class MyAgent(ChessAgent):
+    def choose_move(self, board, legal_moves, move_history, side_to_move):
+        # Your logic here
+        return legal_moves[0]  # Example implementation
+```
+
+Then add to `agents/__init__.py`:
+```python
+from .my_agent import MyAgent
+__all__ = [..., "MyAgent"]
+```
+
 ### Environment Methods
 
 The `ChessEnvironment` class provides several useful methods:
@@ -93,6 +167,7 @@ The `ChessEnvironment` class provides several useful methods:
 - `play_move(move)`: Play a specific move
 - `play_game(verbose)`: Play a complete game
 - `get_pgn()`: Get the game in PGN format
+- `export_pgn_file(filename, include_metadata)`: Export game to PGN file
 
 **Constructor Parameters:**
 - `agent1`, `agent2`: The two chess agents to play
@@ -160,10 +235,18 @@ chess/
 ├── env.py                 # Main chess environment
 ├── requirements.txt       # Python dependencies
 ├── README.md             # This file
+├── agents/               # Chess agent implementations
+│   ├── __init__.py       # Agent package exports
+│   ├── base.py           # Abstract ChessAgent base class
+│   ├── random_agent.py   # Random move selection agent
+│   ├── first_move_agent.py # First move selection agent
+│   ├── last_move_agent.py  # Last move selection agent
+│   └── template_agent.py # Template for new agents
 ├── tests/                # Test suite
 │   ├── __init__.py
 │   ├── test_environment.py
 │   ├── test_agents.py
+│   ├── test_new_agents.py
 │   └── test_integration.py
 └── chess_env/
     └── SPEC.md           # Technical specification
