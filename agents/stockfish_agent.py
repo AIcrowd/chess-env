@@ -26,6 +26,21 @@ class StockfishAgent(ChessAgent):
     This agent requires the Stockfish binary to be installed on the system.
     It automatically detects common installation paths or can be configured
     with a custom path via environment variable STOCKFISH_PATH.
+    
+    The agent provides robust cleanup and can be used as a context manager:
+    
+    ```python
+    # Automatic cleanup with context manager
+    with StockfishAgent() as agent:
+        move = agent.choose_move(board, legal_moves, [], "White")
+    
+    # Manual cleanup
+    agent = StockfishAgent()
+    try:
+        move = agent.choose_move(board, legal_moves, [], "White")
+    finally:
+        agent.close()
+    ```
     """
     
     # Common Stockfish binary paths for different operating systems
@@ -185,14 +200,17 @@ class StockfishAgent(ChessAgent):
                 raise RuntimeError("Stockfish did not respond with 'readyok'")
                 
         except Exception as e:
-            if self._stockfish:
-                self._stockfish.terminate()
+            if hasattr(self, '_stockfish') and self._stockfish:
+                try:
+                    self._stockfish.terminate()
+                except Exception:
+                    pass  # Ignore errors during cleanup
                 self._stockfish = None
             raise RuntimeError(f"Failed to initialize Stockfish: {e}")
     
     def _send_command(self, command: str):
         """Send a command to Stockfish."""
-        if not self._stockfish:
+        if not hasattr(self, '_stockfish') or not self._stockfish:
             raise RuntimeError("Stockfish process not initialized")
         
         self._stockfish.stdin.write(command + "\n")
@@ -200,7 +218,7 @@ class StockfishAgent(ChessAgent):
     
     def _read_response(self, timeout: float = 1.0) -> str:
         """Read response from Stockfish with timeout."""
-        if not self._stockfish:
+        if not hasattr(self, '_stockfish') or not self._stockfish:
             raise RuntimeError("Stockfish process not initialized")
         
         response = ""
@@ -386,22 +404,46 @@ class StockfishAgent(ChessAgent):
         """
         self.time_limit_ms = time_limit_ms
     
+    def is_initialized(self) -> bool:
+        """
+        Check if the Stockfish agent is properly initialized.
+        
+        Returns:
+            True if Stockfish process is running, False otherwise
+        """
+        return hasattr(self, '_stockfish') and self._stockfish is not None and self._stockfish.poll() is None
+    
     def __del__(self):
         """Clean up Stockfish process on deletion."""
-        if self._stockfish:
+        # Use hasattr to safely check if the attribute exists
+        if hasattr(self, '_stockfish') and self._stockfish:
             try:
                 self._stockfish.terminate()
                 self._stockfish.wait(timeout=1)
             except (subprocess.TimeoutExpired, Exception):
-                self._stockfish.kill()
+                try:
+                    self._stockfish.kill()
+                except Exception:
+                    pass  # Ignore errors during cleanup
     
     def close(self):
         """Explicitly close the Stockfish process."""
-        if self._stockfish:
+        if hasattr(self, '_stockfish') and self._stockfish:
             try:
                 self._stockfish.terminate()
                 self._stockfish.wait(timeout=1)
             except (subprocess.TimeoutExpired, Exception):
-                self._stockfish.kill()
+                try:
+                    self._stockfish.kill()
+                except Exception:
+                    pass  # Ignore errors during cleanup
             finally:
                 self._stockfish = None
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures cleanup."""
+        self.close()
