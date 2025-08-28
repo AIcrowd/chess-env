@@ -9,9 +9,8 @@ import platform
 import subprocess
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
-
 import chess
+from dotenv import load_dotenv
 
 from .base import ChessAgent
 
@@ -286,7 +285,10 @@ class StockfishAgent(ChessAgent):
             self._send_command(f"go depth {self.depth}")
         
         # Use a reasonable timeout for move calculation
-        timeout = max(10.0, (self.time_limit_ms or 1000) / 1000.0)  # At least 10 seconds or time_limit
+        if self.time_limit_ms:
+            timeout = max(0.1, (self.time_limit_ms / 1000.0) * 2.0)  # 2x the time limit, minimum 0.1 second
+        else:
+            timeout = max(0.1, (self.depth / 20.0))  # Reasonable timeout based on depth
         response = self._read_response(timeout=timeout)
         
         # Parse best move from response

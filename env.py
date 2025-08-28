@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import chess
 import chess.engine
+
 from agents import ChessAgent, RandomAgent
 from chess_renderer import RICH_AVAILABLE, ChessRenderer
 
@@ -216,12 +217,13 @@ class ChessEnvironment:
             print(f"Error getting move from {side}: {e}")
             return None
 
-    def play_game(self, verbose: bool = True) -> Dict[str, Any]:
+    def play_game(self, verbose: bool = True, progress_callback: callable = None) -> Dict[str, Any]:
         """
         Play a complete game between the two agents.
 
         Args:
             verbose: Whether to print game progress
+            progress_callback: Optional callback function called after each move with (move_count, current_side)
 
         Returns:
             Dictionary containing game results and statistics
@@ -284,6 +286,10 @@ class ChessEnvironment:
                 print("-" * 60)
 
             move_count += 1
+            
+            # Call progress callback if provided
+            if progress_callback:
+                progress_callback(move_count, current_side)
 
         # Game ended
         if 'result' not in locals():

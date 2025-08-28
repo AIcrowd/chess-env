@@ -19,6 +19,8 @@ import json
 import os
 import random
 import re
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -27,6 +29,9 @@ import click
 from p_tqdm import p_map
 from rich.console import Console
 from rich.json import JSON
+from rich.live import Live
+from rich.panel import Panel
+from rich.table import Table
 
 from agents import OpenAIAgent, StockfishAgent
 from env import ChessEnvironment
@@ -45,8 +50,86 @@ class GameResult:
     pgn_content: str
 
 
+class TournamentProgressTracker:
+    """Tracks progress across multiple parallel chess games."""
+    
+    def __init__(self, total_games: int, max_moves: int):
+        self.total_games = total_games
+        self.max_moves = max_moves
+        self.lock = threading.Lock()
+        self.game_progress = {}  # game_id -> moves_played
+        self.completed_games = 0
+        self.total_moves_played = 0
+        self.start_time = time.time()
+        
+    def update_game_progress(self, game_id: int, moves_played: int):
+        """Update progress for a specific game."""
+        with self.lock:
+            if game_id not in self.game_progress:
+                self.total_moves_played += moves_played
+            else:
+                self.total_moves_played += (moves_played - self.game_progress[game_id])
+            self.game_progress[game_id] = moves_played
+            
+            # Print a simple progress update every 10 moves or so
+            if moves_played % 10 == 0 or moves_played == 1:
+                print(f"📊 Game {game_id}: {moves_played} moves | Total: {self.total_moves_played} moves across all games")
+    
+    def mark_game_completed(self, game_id: int):
+        """Mark a game as completed."""
+        with self.lock:
+            # Always mark as completed if we have any record of this game
+            if game_id in self.game_progress or game_id <= self.total_games:
+                self.completed_games += 1
+    
+    def get_progress_stats(self) -> Dict[str, Any]:
+        """Get current progress statistics."""
+        with self.lock:
+            elapsed_time = time.time() - self.start_time
+            active_games = len(self.game_progress)
+            avg_moves_per_game = self.total_moves_played / max(active_games, 1)
+            
+            return {
+                "completed_games": self.completed_games,
+                "active_games": active_games,
+                "total_moves_played": self.total_moves_played,
+                "avg_moves_per_game": avg_moves_per_game,
+                "elapsed_time": elapsed_time,
+                "estimated_total_moves": self.total_games * self.max_moves
+            }
+    
+    def render_progress_display(self) -> Panel:
+        """Render a rich progress display."""
+        stats = self.get_progress_stats()
+        
+        table = Table(show_header=False, box=None, padding=(0, 1))
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="yellow")
+        
+        # Progress overview
+        progress_pct = (stats["completed_games"] / self.total_games) * 100
+        table.add_row("🎯 Progress", f"{stats['completed_games']}/{self.total_games} games ({progress_pct:.1f}%)")
+        
+        # Move statistics
+        moves_pct = (stats["total_moves_played"] / stats["estimated_total_moves"]) * 100 if stats["estimated_total_moves"] > 0 else 0
+        table.add_row("📊 Moves", f"{stats['total_moves_played']} total ({moves_pct:.1f}% of max)")
+        table.add_row("📈 Avg Moves/Game", f"{stats['avg_moves_per_game']:.1f}")
+        
+        # Time statistics
+        elapsed_min = stats["elapsed_time"] / 60
+        table.add_row("⏱️  Elapsed Time", f"{elapsed_min:.1f} minutes")
+        
+        # Active games
+        table.add_row("🔄 Active Games", f"{stats['active_games']}")
+        
+        return Panel(table, title="🏆 Tournament Progress", border_style="green")
+
+
 class AgentFactory:
     """Factory class for creating chess agents from string specifications."""
+    
+    # Cache for Stockfish agents to avoid recreating processes
+    _stockfish_cache = {}
     
     @staticmethod
     def create_agent(agent_spec: str) -> Any:
@@ -90,8 +173,8 @@ class AgentFactory:
         elif agent_spec.startswith("stockfish-"):
             # Parse Stockfish agent specification
             parts = agent_spec.split("-")
-            skill_level = 1
-            depth = 2
+            skill_level = 0  # Use skill 0 for faster responses
+            depth = 1        # Use depth 1 for faster responses
             time_limit_ms = 1000
             
             for part in parts[1:]:
@@ -111,11 +194,31 @@ class AgentFactory:
                     except (IndexError, ValueError):
                         pass
             
-            return StockfishAgent(
-                skill_level=skill_level,
-                depth=depth,
-                time_limit_ms=time_limit_ms
-            )
+            # Create a cache key for this configuration
+            cache_key = f"stockfish-skill{skill_level}-depth{depth}-time{time_limit_ms}"
+            
+            # Check if we have a cached instance
+            if cache_key in AgentFactory._stockfish_cache:
+                # Return a copy of the cached agent (to avoid sharing state between games)
+                cached_agent = AgentFactory._stockfish_cache[cache_key]
+                # Create a new instance with the same parameters but fresh state
+                return StockfishAgent(
+                    skill_level=cached_agent.skill_level,
+                    depth=cached_agent.depth,
+                    time_limit_ms=cached_agent.time_limit_ms,
+                    stockfish_path=cached_agent.stockfish_path
+                )
+            else:
+                # Create new agent and cache it
+                agent = StockfishAgent(
+                    skill_level=skill_level,
+                    depth=depth,
+                    time_limit_ms=time_limit_ms,
+                    hash_size_mb=1,  # Minimal hash for faster startup
+                    threads=1         # Single thread for faster responses
+                )
+                AgentFactory._stockfish_cache[cache_key] = agent
+                return agent
             
         else:
             raise ValueError(f"Unknown agent type: {agent_spec}")
@@ -127,7 +230,8 @@ def play_single_game(
     agent2_spec: str,
     max_moves: int,
     time_limit: float,
-    verbose: bool
+    verbose: bool,
+    progress_tracker: TournamentProgressTracker = None
 ) -> GameResult:
     """
     Play a single chess game between two agents.
@@ -168,8 +272,32 @@ def play_single_game(
             time_limit=time_limit
         )
         
-        # Play the game
-        result = env.play_game(verbose=verbose)
+        # Update Stockfish agents with the time limit if they are Stockfish agents
+        if hasattr(white_agent, 'set_time_limit'):
+            # For Stockfish agents, use a much more aggressive time limit
+            # since they should respond in milliseconds, not seconds
+            if "stockfish" in str(type(white_agent)).lower():
+                white_agent.set_time_limit(50)  # 50ms for Stockfish
+            else:
+                white_agent.set_time_limit(int(time_limit * 1000))
+        if hasattr(black_agent, 'set_time_limit'):
+            # For Stockfish agents, use a much more aggressive time limit
+            if "stockfish" in str(type(black_agent)).lower():
+                black_agent.set_time_limit(50)  # 50ms for Stockfish
+            else:
+                black_agent.set_time_limit(int(time_limit * 1000))
+        
+        # Play the game with progress tracking
+        if progress_tracker and not verbose:
+            # Define progress callback for this game
+            def game_progress_callback(move_count, current_side):
+                progress_tracker.update_game_progress(game_id, move_count)
+            
+            # Use standard play_game with progress callback
+            result = env.play_game(verbose=verbose, progress_callback=game_progress_callback)
+        else:
+            # Use standard play_game for verbose mode
+            result = env.play_game(verbose=verbose)
         
         # Generate PGN content
         pgn_content = env._generate_pgn_content(include_metadata=True)
@@ -185,6 +313,12 @@ def play_single_game(
             final_fen=result['final_fen'],
             pgn_content=pgn_content
         )
+        
+        # Mark game as completed in progress tracker
+        if progress_tracker:
+            progress_tracker.mark_game_completed(game_id)
+            # Also update final move count
+            progress_tracker.update_game_progress(game_id, result['moves_played'])
         
         if verbose:
             print(f"✅ Game {game_id} completed: {result['result']} in {result['moves_played']} moves")
@@ -206,6 +340,9 @@ def play_single_game(
             final_fen="",
             pgn_content=""
         )
+
+
+
 
 
 def aggregate_results(game_results: List[GameResult]) -> Dict[str, Any]:
@@ -450,18 +587,52 @@ def main(
     # Run games with parallel execution (handles both single and multiple games efficiently)
     print(f"🚀 Running {num_games} game{'s' if num_games > 1 else ''}...")
     
-    # Prepare arguments for parallel execution
-    game_args = [
-        (i + 1, agent1, agent2, max_moves, time_limit, verbose)
-        for i in range(num_games)
-    ]
-    
-    # Run games in parallel
-    game_results = p_map(
-        lambda args: play_single_game(*args),
-        game_args,
-        num_cpus=min(num_games, os.cpu_count() or 1)
-    )
+    if num_games > 1 and not verbose:
+        # Use progress tracker for multiple games
+        progress_tracker = TournamentProgressTracker(num_games, max_moves)
+        
+        # Prepare arguments for parallel execution with progress tracker
+        game_args = [
+            (i + 1, agent1, agent2, max_moves, time_limit, verbose, progress_tracker)
+            for i in range(num_games)
+        ]
+        
+        # Run games in parallel with progress display
+        print("\n📊 Progress will be shown during execution...")
+        
+        # Run games in parallel
+        game_results = p_map(
+            lambda args: play_single_game(*args),
+            game_args,
+            num_cpus=min(num_games, os.cpu_count() or 1)
+        )
+        
+        # Show final progress summary
+        print("\n" + "=" * 80)
+        print("📊 FINAL PROGRESS SUMMARY")
+        print("=" * 80)
+        # Update progress tracker with final results
+        for result in game_results:
+            if result.result != "ERROR":
+                # Ensure the game is marked as completed and final moves are recorded
+                progress_tracker.mark_game_completed(result.game_id)
+                progress_tracker.update_game_progress(result.game_id, result.moves_played)
+        
+        console = Console()
+        console.print(progress_tracker.render_progress_display())
+    else:
+        # Standard execution for single game or verbose mode
+        game_args = [
+            (i + 1, agent1, agent2, max_moves, time_limit, verbose)
+            for i in range(num_games)
+        ]
+        
+        # Run games in parallel
+        game_results = p_map(
+            lambda args: play_single_game(*args),
+            game_args,
+            num_cpus=min(num_games, os.cpu_count() or 1)
+        )
     
     # Aggregate results
     stats = aggregate_results(game_results)
