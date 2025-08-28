@@ -481,10 +481,10 @@ agent.update_prompt_template(valid_template)
 
 # If OpenAI API calls fail:
 export OPENAI_API_KEY='your-actual-api-key'
-python example_game.py
+python run_game.py
 
 # If you want to see more detailed output:
-python example_game.py | tee game_log.txt
+python run_game.py | tee game_log.txt
 
 # To analyze the generated PGN file:
 python -c "
@@ -512,7 +512,7 @@ agent = OpenAIAgent(timeout=60.0)
 
 ### Complete Gameplay Example: OpenAI vs Stockfish
 
-The `example_game.py` script demonstrates a complete chess game between an OpenAI agent and a Stockfish Level 1 agent, showcasing template customization and enhanced gameplay features.
+The `run_game.py` script demonstrates a complete chess game between an OpenAI agent and a Stockfish Level 1 agent, showcasing template customization and enhanced gameplay features.
 
 #### Running the Example
 ```bash
@@ -520,7 +520,7 @@ The `example_game.py` script demonstrates a complete chess game between an OpenA
 export OPENAI_API_KEY='your-api-key-here'
 
 # Run the example game
-python example_game.py
+python run_game.py
 ```
 
 #### What the Example Demonstrates
@@ -701,7 +701,7 @@ conservative_agent = OpenAIAgent(
 ```
 
 ### Customizing the Example Game
-You can modify `example_game.py` to experiment with different scenarios:
+You can modify `run_game.py` to experiment with different scenarios:
 
 ```python
 # Change the Stockfish skill level for different difficulty
@@ -741,7 +741,7 @@ else:
 
 ### Running Multiple Games
 ```python
-# Modify example_game.py to run multiple games
+# Modify run_game.py to run multiple games
 for game_num in range(3):
     print(f"\n=== Game {game_num + 1} ===")
     result = env.play_game(verbose=True)

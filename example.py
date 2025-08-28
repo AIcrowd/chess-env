@@ -14,7 +14,7 @@ This script demonstrates ALL available features of the chess environment:
 - Enhanced game termination detection
 - Clean game display
 
-For a specific gameplay example, see example_game.py
+For a specific gameplay example, see run_game.py
 """
 
 import os

@@ -186,20 +186,48 @@ Demonstrates all available features including:
 - Agent analysis and comparison
 - Game termination scenarios
 
-#### `example_game.py` - OpenAI vs Stockfish Gameplay
+#### `run_game.py` - Multi-Game Tournament Script
 ```bash
-python example_game.py
+python run_game.py --help
 ```
-Shows a complete game between OpenAI and Stockfish agents:
-- Template customization and management
-- Random color assignment
-- Dynamic template switching
-- Enhanced game display
-- PGN export to `game.pgn`
+A powerful CLI script for running multiple chess games with comprehensive features:
+- **CLI Configuration**: Configure agents, game parameters, and execution options
+- **Multiple Games**: Run single or multiple games with parallel execution
+- **Agent Support**: OpenAI (gpt-4o, gpt-4o-mini, gpt-5-mini, gpt-5) and Stockfish agents
+- **Parallel Execution**: Uses p_tqdm for efficient multi-game processing
+- **Rich Statistics**: Comprehensive game analysis with prettified JSON output
+- **Combined PGN**: Single PGN file containing all games (default: `games.pgn`)
+- **Flexible Output**: Customizable output filename and verbosity levels
+
+**Usage Examples:**
+```bash
+# Single game with default agents
+python run_game.py
+
+# Multiple games with custom agents
+python run_game.py --agent1 stockfish-skill5-depth10 --agent2 openai-gpt-4o --num-games 10
+
+# Custom game parameters
+python run_game.py --max-moves 50 --time-limit 5.0 --num-games 5 --verbose
+
+# Different OpenAI models
+python run_game.py --agent1 openai-gpt-5-mini --agent2 openai-gpt-4o-mini --num-games 3
+
+# Custom output file
+python run_game.py --output tournament.pgn --num-games 20
+```
 
 ### Using the OpenAI Agent
 
-The OpenAI agent requires an API key to be configured (see Configuration section above):
+The OpenAI agent requires an API key to be configured (see Configuration section above). 
+
+**Note**: The `run_game.py` script supports specific OpenAI models:
+- `openai-gpt-4o` - GPT-4 Omni (most capable)
+- `openai-gpt-4o-mini` - GPT-4 Omni Mini (faster, cheaper)
+- `openai-gpt-5-mini` - GPT-5 Mini (latest model)
+- `openai-gpt-5` - GPT-5 (most advanced)
+
+For other models or custom configurations, use the OpenAIAgent class directly in your code.
 
 ```python
 from env import ChessEnvironment
@@ -225,7 +253,7 @@ print(f"Total moves: {result['moves_played']}")
 ```python
 # Override default settings
 openai_agent = OpenAIAgent(
-    model="gpt-3.5-turbo",    # Use cheaper model for development
+    model="gpt-4o-mini",       # Use smaller model for development
     temperature=0.0,           # Deterministic play
     max_tokens=20              # Limit response length
 )
@@ -342,7 +370,7 @@ success = env.export_pgn_file("simple_game", include_metadata=False)
 
 # Generate PGN content directly
 pgn_content = env._generate_pgn_content(include_metadata=True)
-with open("game.pgn", "w") as f:
+with open("games.pgn", "w") as f:
     f.write(pgn_content)
 ```
 
@@ -580,7 +608,7 @@ chess/
 ├── env.py                 # Main chess environment
 ├── chess_renderer.py      # Chess board renderer with Unicode pieces
 ├── example.py             # Comprehensive feature demonstration
-├── example_game.py        # OpenAI vs Stockfish gameplay example
+├── run_game.py            # OpenAI vs Stockfish gameplay example
 ├── requirements.txt       # Python dependencies
 ├── README.md             # This file
 ├── agents/               # Chess agent implementations
