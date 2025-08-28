@@ -2,7 +2,48 @@
 
 A Python-based chess environment for running games between AI agents, built according to the AIcrowd Chess Challenge specifications. Features enhanced game termination detection, flexible prompt templates, and comprehensive PGN export capabilities.
 
-## Features
+## 🚀 Quick Start
+
+Get up and running in under 2 minutes:
+
+### 1. Setup Environment
+```bash
+# Create and activate conda environment
+conda create python=3.11 --name chess
+conda activate chess
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 2. Run Your First Game
+```bash
+# Quick game between two random agents
+python run_game.py
+
+# Or run a single game programmatically
+python -c "
+from env import ChessEnvironment, RandomAgent
+env = ChessEnvironment(RandomAgent(), RandomAgent())
+result = env.play_game(verbose=True)
+print(f'Game Result: {result[\"result\"]}')
+"
+```
+
+### 3. Try Different Agents
+```bash
+# OpenAI vs Stockfish (requires API key setup)
+python run_game.py --agent1 openai-gpt-4o-mini --agent2 stockfish-skill5-depth10
+
+# Multiple games with custom settings
+python run_game.py --agent1 stockfish-skill1-depth10 --agent2 stockfish-skill10-depth10 --num-games 5
+```
+
+**That's it!** You're now running chess games with AI agents. Continue reading for advanced features and customization.
+
+---
+
+## ✨ Features
 
 - **Two-player chess games** between agent classes
 - **Abstract agent interface** for easy implementation of different strategies
@@ -17,7 +58,7 @@ A Python-based chess environment for running games between AI agents, built acco
 - **Built-in validation** and error handling
 - **Comprehensive test suite** for safe development and updates
 
-## Requirements
+## 📋 Requirements
 
 - Python 3.8+
 - `python-chess` - Chess board representation and game logic
@@ -25,7 +66,7 @@ A Python-based chess environment for running games between AI agents, built acco
 - `openai` - OpenAI API integration for GPT-based agents
 - `rich` - Enhanced terminal rendering with colors and styling (optional, falls back to plain text)
 
-## Installation
+## 🔧 Installation
 
 1. **Create and Activate the chess conda environment:**
    ```bash
@@ -47,7 +88,7 @@ A Python-based chess environment for running games between AI agents, built acco
    # See Configuration section below for details
    ```
 
-## Configuration
+## ⚙️ Configuration
 
 The chess environment supports configuration through environment variables, which can be set in a `.env` file for convenience.
 
@@ -82,9 +123,10 @@ OPENAI_FALLBACK_BEHAVIOR=random_move # Fallback when parsing fails (random_move/
 4. Copy the key to your `.env` file
 
 **Model Selection:**
-- **`gpt-5-mini`** (default): Balanced performance and cost, recommended for most use cases
-- **`gpt-4o-mini`**: Faster and cheaper, good for development and testing
-- **`gpt-5`**: Highest quality, most expensive
+- **`gpt-5-mini`** - Latest model, good balance of capability and cost
+- **`gpt-4o-mini`**: Fast and cost-effective
+- **`gpt-4o`**: High capability, moderate cost
+- **`gpt-5`**: Most advanced, highest cost
 
 **Fallback Behavior:**
 - **`random_move`** (default): Choose a random legal move if parsing fails
@@ -147,7 +189,7 @@ Configuration values are loaded in this order (highest to lowest priority):
 - **Use environment variables** for production deployments
 - **Rotate API keys regularly** for security
 
-## Usage
+## 🎮 Usage
 
 ### Basic Example
 
@@ -170,45 +212,19 @@ print(f"Moves played: {result['moves_played']}")
 print(f"Game over reason: {result['game_over_reason']}")
 ```
 
-### Complete Gameplay Examples
+### 🏆 Tournament Mode with `run_game.py`
 
-The repository includes two comprehensive example files:
+The `run_game.py` script is your go-to tool for running multiple chess games:
 
-#### `example.py` - Comprehensive Feature Demonstration
 ```bash
-python example.py
-```
-Demonstrates all available features including:
-- Basic environment usage
-- Multiple games and statistics
-- Custom starting positions (FEN)
-- PGN export with metadata
-- Agent analysis and comparison
-- Game termination scenarios
-
-#### `run_game.py` - Multi-Game Tournament Script
-```bash
-python run_game.py --help
-```
-A powerful CLI script for running multiple chess games with comprehensive features:
-- **CLI Configuration**: Configure agents, game parameters, and execution options
-- **Multiple Games**: Run single or multiple games with parallel execution
-- **Agent Support**: OpenAI (gpt-4o, gpt-4o-mini, gpt-5-mini, gpt-5) and Stockfish agents
-- **Parallel Execution**: Uses p_tqdm for efficient multi-game processing
-- **Rich Statistics**: Comprehensive game analysis with prettified JSON output
-- **Combined PGN**: Single PGN file containing all games (default: `games.pgn`)
-- **Flexible Output**: Customizable output filename and verbosity levels
-
-**Usage Examples:**
-```bash
-# Single game with default agents
+# Quick start - single game with default agents
 python run_game.py
 
 # Multiple games with custom agents
 python run_game.py --agent1 stockfish-skill5-depth10 --agent2 openai-gpt-4o --num-games 10
 
-# Multiple games with stock fish agents 
-python run_game.py --agent1 stockfish-skill1-depth10 --agent2  stockfish-skill10-depth10 --num-games 10 
+# Stockfish vs Stockfish with different skill levels
+python run_game.py --agent1 stockfish-skill1-depth10 --agent2 stockfish-skill10-depth10 --num-games 10 
 
 # Custom game parameters
 python run_game.py --max-moves 50 --time-limit 5.0 --num-games 5 --verbose
@@ -220,7 +236,12 @@ python run_game.py --agent1 openai-gpt-5-mini --agent2 openai-gpt-4o-mini --num-
 python run_game.py --output tournament.pgn --num-games 20
 ```
 
-### Using the OpenAI Agent
+**Available Agent Types:**
+- **Stockfish**: `stockfish-skill{1-20}-depth{1-20}` (e.g., `stockfish-skill10-depth15`)
+- **OpenAI**: `openai-gpt-4o`, `openai-gpt-4o-mini`, `openai-gpt-5-mini`, `openai-gpt-5`
+- **Built-in**: `random`, `first-move`, `last-move`
+
+### 🧠 Using the OpenAI Agent
 
 The OpenAI agent requires an API key to be configured (see Configuration section above). 
 
@@ -295,7 +316,7 @@ agent.update_fallback_behavior("resign")
 print(f"Current fallback: {agent.get_fallback_behavior()}")
 ```
 
-### Using the Stockfish Agent
+### 🐟 Using the Stockfish Agent
 
 The Stockfish agent provides strong chess play using the Stockfish engine:
 
@@ -337,7 +358,7 @@ custom_agent = StockfishAgent(
 )
 ```
 
-### Starting from Custom Positions
+### 🎯 Starting from Custom Positions
 
 You can start games from specific chess positions using FEN notation:
 
@@ -354,7 +375,7 @@ env = ChessEnvironment(agent1, agent2, initial_fen=endgame_fen)
 result = env.play_game(verbose=True)
 ```
 
-### Exporting Games to PGN Files
+### 📁 Exporting Games to PGN Files
 
 You can export completed games to PGN (Portable Game Notation) files for analysis or sharing:
 
@@ -386,7 +407,7 @@ with open("games.pgn", "w") as f:
 - **Standard format**: Compatible with chess analysis software (Lichess, Chess.com, etc.)
 - **Error handling**: Returns success/failure status with informative error messages
 
-### Visual Chess Board Display
+### 🎨 Visual Chess Board Display
 
 The environment includes a powerful text-based chess board renderer using Unicode chess pieces:
 
@@ -450,7 +471,7 @@ env.set_renderer_options(
    a b c d e f g h  
 ```
 
-### Creating Custom Agents
+### 🎯 Creating Custom Agents
 
 To create your own chess agent, inherit from the `ChessAgent` abstract base class:
 
@@ -547,7 +568,7 @@ The `ChessEnvironment` class provides several useful methods:
 - `time_limit`: Time limit per move in seconds (default: 10.0)
 - `initial_fen`: Optional FEN string to start the game from (default: standard starting position)
 
-## Running the Environment
+## 🚀 Running the Environment
 
 ### Interactive Mode
 
@@ -571,7 +592,7 @@ for i in range(5):
     print(f"Result: {result['result']}, Moves: {result['moves_played']}")
 ```
 
-## Testing
+## 🧪 Testing
 
 The project includes a comprehensive test suite to ensure code quality and prevent regressions.
 
@@ -604,7 +625,7 @@ pytest tests/test_integration.py
 pytest -v
 ```
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 chess/
@@ -638,7 +659,7 @@ chess/
     └── SPEC.md           # Technical specification
 ```
 
-## Development
+## 🛠️ Development
 
 ### Code Style
 
@@ -674,7 +695,7 @@ mypy env.py tests/
 - **Edge case testing** for error conditions
 - **Performance testing** for time-sensitive operations
 
-## Chess Rules Implementation
+## ♟️ Chess Rules Implementation
 
 The environment uses the `python-chess` library which implements:
 - Standard chess rules and move validation
@@ -682,14 +703,14 @@ The environment uses the `python-chess` library which implements:
 - PGN format support
 - Game termination detection (checkmate, stalemate, draw conditions)
 
-## Performance Considerations
+## ⚡ Performance Considerations
 
 - **Move generation** is optimized using python-chess
 - **Time limits** are enforced per move
 - **Maximum move limits** prevent infinite games
 - **Memory usage** is minimal for typical game lengths
 
-## Future Enhancements
+## 🔮 Future Enhancements
 
 Based on the SPEC.md, potential future features include:
 - Stockfish engine integration for evaluation
@@ -699,7 +720,7 @@ Based on the SPEC.md, potential future features include:
 - Web interface integration
 - HuggingFace model integration for LLM-based agents
 
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -707,11 +728,11 @@ Based on the SPEC.md, potential future features include:
 4. Ensure all tests pass
 5. Submit a pull request
 
-## License
+## 📄 License
 
 This project is part of the AIcrowd Chess Challenge and follows the challenge specifications.
 
-## Support
+## 🆘 Support
 
 For issues related to:
 - **Environment setup**: Check the installation instructions
