@@ -207,6 +207,9 @@ python run_game.py
 # Multiple games with custom agents
 python run_game.py --agent1 stockfish-skill5-depth10 --agent2 openai-gpt-4o --num-games 10
 
+# Multiple games with stock fish agents 
+python run_game.py --agent1 stockfish-skill1-depth10 --agent2  stockfish-skill10-depth10 --num-games 10 
+
 # Custom game parameters
 python run_game.py --max-moves 50 --time-limit 5.0 --num-games 5 --verbose
 
