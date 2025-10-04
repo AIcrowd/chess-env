@@ -238,9 +238,46 @@ python run_game.py --output tournament.pgn --num-games 20
 **Available Agent Types:**
 - **Stockfish**: `stockfish-skill{1-20}-depth{1-20}` (e.g., `stockfish-skill10-depth15`)
 - **OpenAI**: `openai-gpt-4o`, `openai-gpt-4o-mini`, `openai-gpt-5-mini`, `openai-gpt-5`
+- **Hugging Face (<10B)**: aliases for fast setup (requires token), or pass full repo id
+  - `hf-llama-8b` → `meta-llama/Meta-Llama-3-8B-Instruct`
+  - `hf-llama3-8b` → `meta-llama/Meta-Llama-3-8B-Instruct`
+  - `hf-llama-3.1-8b` → `meta-llama/Meta-Llama-3.1-8B-Instruct`
+  - `hf-qwen-7b` → `Qwen/Qwen2.5-7B-Instruct`
+  - `hf-mistral-7b` → `mistralai/Mistral-7B-Instruct-v0.3`
+  - `hf-phi-3-mini` → `microsoft/Phi-3-mini-128k-instruct`
+  - `hf-phi-3.5-mini` → `microsoft/Phi-3.5-mini-instruct`
+  - `hf-gemma-7b` → `google/gemma-7b-it`
 - **Built-in**: `random`, `first-move`, `last-move`
 
 ### 🧠 Using the OpenAI Agent
+### 🤗 Using the Hugging Face Agent
+
+To use Hugging Face models, set a token and choose an alias (focused on <10B parameter models) or pass the full model repo id. See the [HF Inference Providers list](https://huggingface.co/inference/models?desc_sort=pricingInput) for available models and pricing.
+
+```bash
+# Required for HF agent
+export HUGGINGFACEHUB_API_TOKEN=your_hf_token
+# or
+export HF_TOKEN=your_hf_token
+
+# Examples
+python run_game.py --agent1 hf-llama-8b --agent2 stockfish-skill1-depth2
+python run_game.py --agent1 hf-qwen-7b --agent2 openai-gpt-4o-mini
+python run_game.py --agent1 hf-mistral-7b --agent2 hf-phi-3-mini --num-games 3
+
+# Use a full repo id directly
+python run_game.py --agent1 hf-meta-llama/Meta-Llama-3.1-8B-Instruct --agent2 stockfish-skill1-depth2
+```
+
+Aliases currently supported (focused on <10B class):
+- `hf-llama-8b`, `hf-llama3-8b`, `hf-llama-3.1-8b`
+- `hf-qwen-7b`
+- `hf-mistral-7b`
+- `hf-phi-3-mini`, `hf-phi-3.5-mini`
+- `hf-gemma-7b`
+
+Note: An additional `hf-deepseek` alias maps to `deepseek-ai/DeepSeek-V3-0324` for convenience, even though it exceeds 10B.
+
 
 The OpenAI agent requires an API key to be configured (see Configuration section above). 
 

@@ -1,5 +1,4 @@
 python-chess>=1.10.0
-Chessnut>=2.4.0
 rich>=13.0.0
 stockfish>=3.28.0
 openai>=1.0.0
@@ -10,3 +9,4 @@ pytest-cov>=4.0.0
 black>=23.0.0
 flake8>=6.0.0
 mypy>=1.0.0
+huggingface_hub>=0.24.0

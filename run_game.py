@@ -33,7 +33,7 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
-from agents import OpenAIAgent, StockfishAgent
+from agents import HuggingFaceAgent, OpenAIAgent, StockfishAgent
 from env import ChessEnvironment
 
 
@@ -220,6 +220,40 @@ class AgentFactory:
                 AgentFactory._stockfish_cache[cache_key] = agent
                 return agent
             
+        elif agent_spec.startswith("hf-"):
+            # Hugging Face agent configurations (hf-<model_alias> or hf-<model_id>)
+            # Examples: hf-deepseek, hf-deepseek-v3, hf-meta-llama-3.1-8b-instruct
+            alias = agent_spec[len("hf-"):]
+            # Simple alias mapping; users can supply full repo ids too
+            alias_map = {
+                # DeepSeek (not <10B but kept for completeness/examples)
+                "deepseek": "deepseek-ai/DeepSeek-V3-0324",
+                "deepseek-v3": "deepseek-ai/DeepSeek-V3-0324",
+
+                # Focus: <10B class aliases
+                # Llama 3 / 3.1 8B Instruct
+                "llama-8b": "meta-llama/Meta-Llama-3-8B-Instruct",
+                "llama3-8b": "meta-llama/Meta-Llama-3-8B-Instruct",
+                "llama3.1-8b": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+                "llama-3-8b": "meta-llama/Meta-Llama-3-8B-Instruct",
+                "llama-3.1-8b": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+
+                # Qwen 7B Instruct
+                "qwen-7b": "Qwen/Qwen2.5-7B-Instruct",
+                "qwen2.5-7b": "Qwen/Qwen2.5-7B-Instruct",
+
+                # Mistral 7B Instruct
+                "mistral-7b": "mistralai/Mistral-7B-Instruct-v0.3",
+
+                # Phi 3.x Mini
+                "phi-3-mini": "microsoft/Phi-3-mini-128k-instruct",
+                "phi-3.5-mini": "microsoft/Phi-3.5-mini-instruct",
+
+                # Gemma 7B IT
+                "gemma-7b": "google/gemma-7b-it",
+            }
+            model_id = alias_map.get(alias, alias)
+            return HuggingFaceAgent(model=model_id, max_tokens=500)
         else:
             raise ValueError(f"Unknown agent type: {agent_spec}")
 
@@ -524,12 +558,12 @@ def print_summary_stats(stats: Dict[str, Any], game_results: List[GameResult]):
 @click.option(
     "--agent1",
     default="openai-gpt-4o",
-    help="First agent specification. OpenAI: 'openai-gpt-4o', 'openai-gpt-4o-mini', 'openai-gpt-5-mini', 'openai-gpt-5'. Stockfish: 'stockfish-skill1-depth2', 'stockfish-skill5-depth10-time1000'"
+    help="First agent specification. OpenAI: 'openai-gpt-4o', 'openai-gpt-4o-mini', 'openai-gpt-5-mini', 'openai-gpt-5'. Stockfish: 'stockfish-skill1-depth2', 'stockfish-skill5-depth10-time1000'. HF (<10B): 'hf-llama-8b', 'hf-qwen-7b', 'hf-mistral-7b', 'hf-phi-3-mini', 'hf-gemma-7b' or full repo id"
 )
 @click.option(
     "--agent2", 
     default="stockfish-skill1-depth2",
-    help="Second agent specification. OpenAI: 'openai-gpt-4o', 'openai-gpt-4o-mini', 'openai-gpt-5-mini', 'openai-gpt-5'. Stockfish: 'stockfish-skill1-depth2', 'stockfish-skill5-depth10-time1000'"
+    help="Second agent specification. OpenAI: 'openai-gpt-4o', 'openai-gpt-4o-mini', 'openai-gpt-5-mini', 'openai-gpt-5'. Stockfish: 'stockfish-skill1-depth2', 'stockfish-skill5-depth10-time1000'. HF (<10B): 'hf-llama-8b', 'hf-qwen-7b', 'hf-mistral-7b', 'hf-phi-3-mini', 'hf-gemma-7b' or full repo id"
 )
 @click.option(
     "--max-moves",
@@ -572,6 +606,12 @@ def main(
         if not os.getenv("OPENAI_API_KEY"):
             print("❌ Error: OPENAI_API_KEY environment variable not set")
             print("Please set your OpenAI API key in a .env file or environment variable")
+            return
+    # Check HF token if using HF agent
+    if "hf-" in agent1 or "hf-" in agent2:
+        if not (os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.getenv("HF_TOKEN")):
+            print("❌ Error: HUGGINGFACEHUB_API_TOKEN or HF_TOKEN environment variable not set")
+            print("Please set your Hugging Face token in a .env file or environment variable")
             return
     
     print("=== Multi-Game Chess Tournament ===")
