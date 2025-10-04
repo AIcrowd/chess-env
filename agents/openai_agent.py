@@ -130,7 +130,7 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         self.client = openai.OpenAI(api_key=self.api_key)
         
         # Load configuration from environment variables if not provided
-        self.model = model or os.environ.get("OPENAI_MODEL", "gpt-5-mini")
+        self.model = model or os.environ.get("OPENAI_MODEL", "gpt-5")
         self.temperature = temperature or float(os.environ.get("OPENAI_TEMPERATURE", "0.1"))
         self.max_tokens = max_tokens or int(os.environ.get("OPENAI_MAX_TOKENS", "50"))
         self.timeout = timeout or float(os.environ.get("OPENAI_TIMEOUT", "30.0"))

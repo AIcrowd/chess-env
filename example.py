@@ -19,7 +19,6 @@ For a specific gameplay example, see run_game.py
 
 import os
 
-import chess
 from agents import (
     ChessAgent,
     FirstMoveAgent,
@@ -30,6 +29,8 @@ from agents import (
 )
 from chess_renderer import RICH_AVAILABLE
 from env import ChessEnvironment
+
+import chess
 
 
 def demonstrate_basic_usage():
@@ -385,7 +386,7 @@ def demonstrate_openai_agent():
             return False
         
         print("1. Testing OpenAI API connection...")
-        openai_agent = OpenAIAgent(api_key=api_key, model="gpt-5-mini")
+        openai_agent = OpenAIAgent(api_key=api_key, model="gpt-5")
         
         if openai_agent.test_connection():
             print("✅ OpenAI API connection successful")

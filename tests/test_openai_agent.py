@@ -13,9 +13,9 @@ import os
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from agents.openai_agent import OpenAIAgent
 
 import chess
-from agents.openai_agent import OpenAIAgent
 
 
 class TestOpenAIAgent:
@@ -30,7 +30,7 @@ class TestOpenAIAgent:
             agent = OpenAIAgent(api_key="test-key-123")
             
             assert agent.api_key == "test-key-123"
-            assert agent.model == "gpt-5-mini"
+            assert agent.model == "gpt-5"
             assert agent.temperature == 0.1
             assert agent.max_tokens == 50
             assert agent.fallback_behavior == "random_move"
@@ -603,7 +603,7 @@ class TestOpenAIAgentIntegration:
     def test_real_openai_move_selection(self):
         """Test that OpenAI agent can make real moves."""
         try:
-            agent = OpenAIAgent(model="gpt-5-mini", temperature=0.0)
+            agent = OpenAIAgent(model="gpt-5", temperature=0.0)
             
             # Create a simple position
             board = chess.Board()

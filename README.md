@@ -109,7 +109,7 @@ To use the OpenAI agent, you'll need an OpenAI API key:
 OPENAI_API_KEY=your_openai_api_key_here
 
 # Optional OpenAI settings
-OPENAI_MODEL=gpt-5-mini              # Model to use (default: gpt-5-mini)
+OPENAI_MODEL=gpt-5                   # Model to use (default: gpt-5)
 OPENAI_TEMPERATURE=0.1               # Generation temperature (default: 0.1)
 OPENAI_MAX_TOKENS=50                 # Max tokens per response (default: 50)
 OPENAI_TIMEOUT=30.0                  # API timeout in seconds (default: 30.0)
@@ -123,10 +123,9 @@ OPENAI_FALLBACK_BEHAVIOR=random_move # Fallback when parsing fails (random_move/
 4. Copy the key to your `.env` file
 
 **Model Selection:**
-- **`gpt-5-mini`** - Latest model, good balance of capability and cost
+- **`gpt-5`** - Most advanced model, highest capability and cost
 - **`gpt-4o-mini`**: Fast and cost-effective
 - **`gpt-4o`**: High capability, moderate cost
-- **`gpt-5`**: Most advanced, highest cost
 
 **Fallback Behavior:**
 - **`random_move`** (default): Choose a random legal move if parsing fails
@@ -161,7 +160,7 @@ CHESS_TIME_LIMIT=30.0                # Time limit per move in seconds (default: 
 OPENAI_API_KEY=sk-1234567890abcdef1234567890abcdef1234567890abcdef
 
 # OpenAI Model Settings
-OPENAI_MODEL=gpt-5-mini
+OPENAI_MODEL=gpt-5
 OPENAI_TEMPERATURE=0.1
 OPENAI_MAX_TOKENS=50
 OPENAI_TIMEOUT=30.0
@@ -257,7 +256,7 @@ For other models or custom configurations, use the OpenAIAgent class directly in
 from env import ChessEnvironment
 from agents import OpenAIAgent, RandomAgent
 
-# Create OpenAI agent (will use gpt-5-mini by default, or settings from .env file)
+# Create OpenAI agent (will use gpt-5 by default, or settings from .env file)
 openai_agent = OpenAIAgent()
 
 # Create a random opponent

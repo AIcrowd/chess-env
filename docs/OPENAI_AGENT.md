@@ -33,7 +33,7 @@ import chess
 # Create an OpenAI agent
 agent = OpenAIAgent(
     api_key="your-api-key",  # Or use environment variable
-    model="gpt-5-mini",      # OpenAI model to use
+    model="gpt-5",           # OpenAI model to use
     temperature=0.1,         # Generation temperature
     max_tokens=50            # Maximum tokens to generate
 )
@@ -53,7 +53,7 @@ print(f"Agent chose: {board.san(move)}")
 ```python
 # Use different OpenAI models
 agent = OpenAIAgent(model="gpt-3.5-turbo")  # Faster, cheaper
-agent = OpenAIAgent(model="gpt-5-mini")     # Balanced performance and cost
+agent = OpenAIAgent(model="gpt-5")          # Most advanced model
 agent = OpenAIAgent(model="gpt-4")           # Most capable, expensive
 ```
 
@@ -688,13 +688,13 @@ agent.update_prompt_template(tactical_opening)
 ```python
 # Create different agents for different playing styles
 aggressive_agent = OpenAIAgent(
-    model="gpt-5-mini",
+    model="gpt-5",
     temperature=0.8,  # More creative/aggressive
     max_tokens=100
 )
 
 conservative_agent = OpenAIAgent(
-    model="gpt-5-mini", 
+    model="gpt-5", 
     temperature=0.0,  # More deterministic/defensive
     max_tokens=50
 )
