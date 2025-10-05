@@ -197,6 +197,9 @@ class StockfishAgent(ChessAgent):
             response = self._read_response(timeout=5.0)  # 5 second timeout for initialization
             if "readyok" not in response:
                 raise RuntimeError("Stockfish did not respond with 'readyok'")
+            
+            # Start a new game context to clear internal engine state
+            self._send_command("ucinewgame")
                 
         except Exception as e:
             if hasattr(self, '_stockfish') and self._stockfish:
@@ -268,14 +271,16 @@ class StockfishAgent(ChessAgent):
             self._send_command(f"setoption name UCI_Elo value {self.elo_rating}")
     
     def _set_position(self, board: chess.Board):
-        """Set the current position in Stockfish."""
-        if board.move_stack:
-            # Set position with moves
-            moves = [move.uci() for move in board.move_stack]
-            self._send_command(f"position startpos moves {' '.join(moves)}")
-        else:
-            # Starting position
-            self._send_command("position startpos")
+        """Set the current position in Stockfish using exact FEN and wait for readiness."""
+        # If it's a fresh game (no moves yet), inform engine explicitly
+        if not board.move_stack:
+            self._send_command("ucinewgame")
+        # Use exact FEN to avoid any discrepancy in castling/en passant rights
+        fen = board.fen()
+        self._send_command(f"position fen {fen}")
+        # Ensure engine processed position before searching
+        self._send_command("isready")
+        self._read_response(timeout=1.0)
     
     def _get_best_move(self) -> str:
         """Get the best move from Stockfish."""

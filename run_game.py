@@ -285,20 +285,29 @@ class AgentFactory:
             
             for part in parts[1:]:
                 if part.startswith("skill"):
-                    try:
-                        skill_level = int(part.split("=")[1])
-                    except (IndexError, ValueError):
-                        pass
+                    # Support both forms: skill10 and skill=10
+                    m = re.search(r"skill(?:=)?(\d+)", part)
+                    if m:
+                        try:
+                            skill_level = int(m.group(1))
+                        except ValueError:
+                            pass
                 elif part.startswith("depth"):
-                    try:
-                        depth = int(part.split("=")[1])
-                    except (IndexError, ValueError):
-                        pass
+                    # Support both forms: depth2 and depth=2
+                    m = re.search(r"depth(?:=)?(\d+)", part)
+                    if m:
+                        try:
+                            depth = int(m.group(1))
+                        except ValueError:
+                            pass
                 elif part.startswith("time"):
-                    try:
-                        time_limit_ms = int(part.split("=")[1])
-                    except (IndexError, ValueError):
-                        pass
+                    # Support both forms: time1000 and time=1000 (milliseconds)
+                    m = re.search(r"time(?:=)?(\d+)", part)
+                    if m:
+                        try:
+                            time_limit_ms = int(m.group(1))
+                        except ValueError:
+                            pass
             
             # Create a cache key for this configuration
             cache_key = f"stockfish-skill{skill_level}-depth{depth}-time{time_limit_ms}"
@@ -863,19 +872,36 @@ def run_tournament(
         # Sort by quality descending
         candidate_pairs.sort(key=lambda x: x[2], reverse=True)
 
+        # Build a batch allowing agent reuse to meet the parallelism target.
+        # We still respect max_games_per_agent unless caps are relaxed.
         batch = []
-        used = set()
-        for a, b, q in candidate_pairs:
-            if len(batch) >= batch_target:
-                break
-            if a in used or b in used:
-                continue
-            a_state = agent_states[a]
-            b_state = agent_states[b]
-            white_spec, black_spec = _choose_colors_soft_balance(a_state, b_state)
-            batch.append((a, b, white_spec, black_spec))
-            used.add(a)
-            used.add(b)
+        planned_counts: Dict[str, int] = {}
+        # Keep cycling candidate pairs until we either fill the batch or can no longer add pairs
+        while len(batch) < batch_target and candidate_pairs:
+            added_any = False
+            for a, b, q in candidate_pairs:
+                if len(batch) >= batch_target:
+                    break
+                # Respect caps if not relaxed (consider already planned games in this batch)
+                if not caps_relaxed and max_games_per_agent > 0:
+                    if agent_states[a].games + planned_counts.get(a, 0) >= max_games_per_agent:
+                        continue
+                    if agent_states[b].games + planned_counts.get(b, 0) >= max_games_per_agent:
+                        continue
+                a_state = agent_states[a]
+                b_state = agent_states[b]
+                white_spec, black_spec = _choose_colors_soft_balance(a_state, b_state)
+                batch.append((a, b, white_spec, black_spec))
+                planned_counts[a] = planned_counts.get(a, 0) + 1
+                planned_counts[b] = planned_counts.get(b, 0) + 1
+                added_any = True
+            if not added_any:
+                # If we couldn't add anything in this pass, try relaxing caps once
+                if not caps_relaxed and max_games_per_agent > 0:
+                    caps_relaxed = True
+                    continue
+                else:
+                    break
 
         # If we cannot fill any game, relax caps once and retry; otherwise stop
         if len(batch) == 0:

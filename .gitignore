@@ -219,3 +219,7 @@ __marimo__/
 docs/SPEC.md
 *.pgn 
 .env
+
+
+tournament_out/*
+tournament_out/tournament.json
