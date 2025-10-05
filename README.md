@@ -213,7 +213,7 @@ print(f"Game over reason: {result['game_over_reason']}")
 
 ### 🏆 Tournament Mode with `run_game.py`
 
-The `run_game.py` script is your go-to tool for running multiple chess games:
+The `run_game.py` script now supports N-agent tournaments driven by TrueSkill scheduling. Use `--agent` (repeatable) to supply 2+ agent specs. Games are scheduled in parallel batches, per-game PGNs are saved to `tournament_out/pgns/`, and a final `tournament.json` contains standings, agent histories, and game details.
 
 ```bash
 # Quick start - single game with default agents
@@ -233,6 +233,39 @@ python run_game.py --agent1 openai-gpt-5-mini --agent2 openai-gpt-4o-mini --num-
 
 # Custom output file
 python run_game.py --output tournament.pgn --num-games 20
+
+# N-agent TrueSkill tournament (2+ --agent required)
+python run_game.py \
+  --agent stockfish-skill1-depth2 \
+  --agent openai-gpt-4o-mini \
+  --agent hf-llama-8b \
+  --num-games 12 \
+  --scheduler trueskill \
+  --parallelism 4 \
+  --output-dir tournament_out
+```
+
+#### Example: 5-agent TrueSkill tournament (20 games)
+
+```bash
+python run_game.py \
+  --agent stockfish-skill1-depth2 \
+  --agent stockfish-skill3-depth2 \
+  --agent openai-gpt-4o-mini \
+  --agent openai-gpt-5-mini \
+  --agent hf-llama-8b \
+  --num-games 20 \
+  --parallelism 4 \
+  --time-limit 15 \
+  --max-moves 200 \
+  --output-dir tournament_out
+```
+
+Environment variables (required when using OpenAI/HF agents):
+
+```bash
+export OPENAI_API_KEY=...            # for openai-* agents
+export HUGGINGFACEHUB_API_TOKEN=...  # or HF_TOKEN, for hf-* agents
 ```
 
 **Available Agent Types:**
@@ -248,6 +281,19 @@ python run_game.py --output tournament.pgn --num-games 20
   - `hf-phi-3.5-mini` → `microsoft/Phi-3.5-mini-instruct`
   - `hf-gemma-7b` → `google/gemma-7b-it`
 - **Built-in**: `random`, `first-move`, `last-move`
+
+#### Tournament CLI Options
+
+- `--agent` (repeatable; 2+ required): agent specs understood by `AgentFactory`.
+- `--num-games` (int): total target games to run.
+- `--max-games-per-agent` (int; default 0): soft cap per agent; relaxed if needed to reach `num-games`.
+- `--output-dir` (str; default `tournament_out`): where per-game PGNs and `tournament.json` are written.
+- `--scheduler` (`trueskill` default, or `round_robin`): pairing policy. TrueSkill uses `quality_1vs1` to pick balanced matches, updating ratings with `rate_1vs1`.
+- `--parallelism` (int): games per batch; default is `min(CPU count, remaining games)`, at least 1.
+
+Outputs include:
+- Per-game PGNs: `output_dir/pgns/<timestamp>-g<id>-<white>-vs-<black>-<result>-<hash>.pgn`
+- Final JSON: `output_dir/tournament.json` with config, per-agent ratings and totals, engine metrics, full game list, standings sorted by conservative rating (mu - 3*sigma), and optional head-to-head matrix.
 
 ### 🧠 Using the OpenAI Agent
 ### 🤗 Using the Hugging Face Agent

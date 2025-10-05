@@ -15,6 +15,8 @@ Usage examples:
   python run_game.py --help
 """
 
+import datetime
+import hashlib
 import json
 import os
 import random
@@ -22,12 +24,14 @@ import re
 import threading
 import time
 from dataclasses import dataclass
+from itertools import combinations
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import chess
 import chess.engine
 import click
+import trueskill
 from p_tqdm import p_map
 from rich.console import Console
 from rich.json import JSON
@@ -55,6 +59,12 @@ class GameResult:
     black_accuracy_pct: float = 0.0
     white_acpl: float = 0.0
     black_acpl: float = 0.0
+    pgn_path: str = ""
+    # Illegal move attempt metrics
+    white_illegal_attempts: int = 0
+    black_illegal_attempts: int = 0
+    white_move_attempts: int = 0
+    black_move_attempts: int = 0
 
 
 class _StockfishAnalyzer:
@@ -361,7 +371,9 @@ def play_single_game(
     max_moves: int,
     time_limit: float,
     verbose: bool,
-    progress_tracker: TournamentProgressTracker = None
+    progress_tracker: TournamentProgressTracker = None,
+    force_white_spec: str | None = None,
+    force_black_spec: str | None = None,
 ) -> GameResult:
     """
     Play a single chess game between two agents.
@@ -379,17 +391,21 @@ def play_single_game(
     """
     try:
         # Create agents
-        agent1 = AgentFactory.create_agent(agent1_spec)
-        agent2 = AgentFactory.create_agent(agent2_spec)
-        
-        # Randomly assign White and Black
-        agents = [agent1, agent2]
-        random.shuffle(agents)
-        white_agent, black_agent = agents
-        
-        # Get agent names for display
-        white_name = f"{agent1_spec}" if white_agent == agent1 else f"{agent2_spec}"
-        black_name = f"{agent2_spec}" if white_agent == agent1 else f"{agent1_spec}"
+        if force_white_spec is not None and force_black_spec is not None:
+            white_agent = AgentFactory.create_agent(force_white_spec)
+            black_agent = AgentFactory.create_agent(force_black_spec)
+            white_name = force_white_spec
+            black_name = force_black_spec
+        else:
+            agent1 = AgentFactory.create_agent(agent1_spec)
+            agent2 = AgentFactory.create_agent(agent2_spec)
+            # Randomly assign White and Black
+            agents = [agent1, agent2]
+            random.shuffle(agents)
+            white_agent, black_agent = agents
+            # Get agent names for display
+            white_name = f"{agent1_spec}" if white_agent == agent1 else f"{agent2_spec}"
+            black_name = f"{agent2_spec}" if white_agent == agent1 else f"{agent1_spec}"
         
         if verbose:
             print(f"🎲 Game {game_id}: {white_name} (White) vs {black_name} (Black)")
@@ -458,6 +474,10 @@ def play_single_game(
             black_accuracy_pct=analysis["black_accuracy_pct"],
             white_acpl=analysis["white_acpl"],
             black_acpl=analysis["black_acpl"],
+            white_illegal_attempts=result.get('white_illegal_attempts', 0),
+            black_illegal_attempts=result.get('black_illegal_attempts', 0),
+            white_move_attempts=result.get('white_move_attempts', result['moves_played']//2 + (1 if result['moves_played'] % 2 == 1 else 0)),
+            black_move_attempts=result.get('black_move_attempts', result['moves_played']//2),
         )
         
         # Mark game as completed in progress tracker
@@ -516,6 +536,9 @@ def aggregate_results(game_results: List[GameResult]) -> Dict[str, Any]:
     agent_accuracy_count = {}
     agent_acpl_sum = {}
     agent_acpl_count = {}
+    # Illegal attempts aggregates
+    agent_illegal_attempts = {}
+    agent_move_attempts = {}
     
     for result in game_results:
         if result.result == "ERROR":
@@ -553,6 +576,18 @@ def aggregate_results(game_results: List[GameResult]) -> Dict[str, Any]:
         agent_accuracy_count[result.black_agent] += 1
         agent_acpl_sum[result.black_agent] += result.black_acpl
         agent_acpl_count[result.black_agent] += 1
+
+        # Initialize illegal tracking dicts if needed
+        for agent in [result.white_agent, result.black_agent]:
+            if agent not in agent_illegal_attempts:
+                agent_illegal_attempts[agent] = 0
+                agent_move_attempts[agent] = 0
+
+        # Accumulate illegal attempts and move attempts per agent (per game totals)
+        agent_illegal_attempts[result.white_agent] += getattr(result, 'white_illegal_attempts', 0)
+        agent_illegal_attempts[result.black_agent] += getattr(result, 'black_illegal_attempts', 0)
+        agent_move_attempts[result.white_agent] += getattr(result, 'white_move_attempts', 0)
+        agent_move_attempts[result.black_agent] += getattr(result, 'black_move_attempts', 0)
         
         # Count wins, draws, and other outcomes
         if "wins" in result.result:
@@ -577,6 +612,9 @@ def aggregate_results(game_results: List[GameResult]) -> Dict[str, Any]:
         "win_rates": {},
         "agent_avg_accuracy_pct": {},
         "agent_avg_acpl": {},
+        "agent_illegal_attempts": agent_illegal_attempts,
+        "agent_move_attempts": agent_move_attempts,
+        "agent_illegal_pct": {},
     }
     
     # Calculate win rates
@@ -592,6 +630,10 @@ def aggregate_results(game_results: List[GameResult]) -> Dict[str, Any]:
             stats["agent_avg_acpl"][agent] = agent_acpl_sum[agent] / agent_acpl_count[agent]
         else:
             stats["agent_avg_acpl"][agent] = 0.0
+        # Illegal percentage
+        attempts = agent_move_attempts.get(agent, 0)
+        illegal = agent_illegal_attempts.get(agent, 0)
+        stats["agent_illegal_pct"][agent] = (illegal / attempts * 100.0) if attempts > 0 else 0.0
     
     return stats
 
@@ -647,6 +689,9 @@ def print_summary_stats(stats: Dict[str, Any], game_results: List[GameResult]):
         white_games = stats['agent_white_games'].get(agent, 0)
         black_games = stats['agent_black_games'].get(agent, 0)
         win_rate = stats['win_rates'].get(agent, 0)
+        illegal_pct = stats.get('agent_illegal_pct', {}).get(agent, 0.0)
+        illegal_attempts = stats.get('agent_illegal_attempts', {}).get(agent, 0)
+        total_attempts = stats.get('agent_move_attempts', {}).get(agent, 0)
         print(f"🎮 {agent}:")
         print(f"   Games Played: {games_played}")
         print(f"   As White: {white_games}")
@@ -658,6 +703,7 @@ def print_summary_stats(stats: Dict[str, Any], game_results: List[GameResult]):
         avg_acpl = stats.get('agent_avg_acpl', {}).get(agent, 0.0)
         print(f"   Accuracy (engine match): {avg_acc:.1f}%")
         print(f"   ACPL: {avg_acpl:.1f}")
+        print(f"   Illegal Moves: {illegal_attempts}/{total_attempts} ({illegal_pct:.2f}%)")
         print()
     
     # Print prettified JSON stats
@@ -697,11 +743,412 @@ def print_summary_stats(stats: Dict[str, Any], game_results: List[GameResult]):
             "win_rate": round(win_rate, 2),
             "win_percentage": f"{win_rate:.1f}%",
             "avg_accuracy_pct": round(stats.get('agent_avg_accuracy_pct', {}).get(agent, 0.0), 2),
-            "avg_acpl": round(stats.get('agent_avg_acpl', {}).get(agent, 0.0), 2)
+            "avg_acpl": round(stats.get('agent_avg_acpl', {}).get(agent, 0.0), 2),
+            "illegal_attempts": stats.get('agent_illegal_attempts', {}).get(agent, 0),
+            "move_attempts": stats.get('agent_move_attempts', {}).get(agent, 0),
+            "illegal_pct": round(stats.get('agent_illegal_pct', {}).get(agent, 0.0), 2),
         }
     
     # Print prettified JSON using rich
     console.print(JSON(json.dumps(json_stats, indent=2)))
+
+
+# =====================
+# N-agent Tournament
+# =====================
+
+@dataclass
+class AgentState:
+    spec: str
+    rating: trueskill.Rating
+    games: int = 0
+    as_white: int = 0
+    as_black: int = 0
+    wins: int = 0
+    losses: int = 0
+    draws: int = 0
+    accuracy_sum: float = 0.0
+    acpl_sum: float = 0.0
+    illegal_attempts_sum: int = 0
+    move_attempts_sum: int = 0
+    history: list = None
+
+    def __post_init__(self):
+        if self.history is None:
+            self.history = []
+
+    @property
+    def conservative(self) -> float:
+        return self.rating.mu - 3 * self.rating.sigma
+
+
+def _result_to_code(result_str: str) -> str:
+    if "White wins" in result_str:
+        return "1-0"
+    if "Black wins" in result_str:
+        return "0-1"
+    if "Draw" in result_str:
+        return "1-1"
+    return "*"
+
+
+def _choose_colors_soft_balance(a_state: AgentState, b_state: AgentState) -> Tuple[str, str]:
+    a_delta = a_state.as_white - a_state.as_black
+    b_delta = b_state.as_white - b_state.as_black
+    if a_delta > b_delta:
+        # Give White to B to reduce imbalance
+        return b_state.spec, a_state.spec
+    else:
+        return a_state.spec, b_state.spec
+
+
+def run_tournament(
+    agent_specs: List[str],
+    num_games: int,
+    max_moves: int,
+    time_limit: float,
+    scheduler: str,
+    parallelism: int,
+    output_dir: str,
+    max_games_per_agent: int,
+    verbose: bool,
+):
+    # Prepare output directories
+    out_dir = Path(output_dir)
+    pgn_dir = out_dir / "pgns"
+    pgn_dir.mkdir(parents=True, exist_ok=True)
+
+    # TrueSkill environment
+    ts_env = trueskill.TrueSkill(draw_probability=0.1)
+    trueskill.setup()
+
+    # Agent states
+    agent_states: Dict[str, AgentState] = {
+        spec: AgentState(spec=spec, rating=ts_env.Rating()) for spec in agent_specs
+    }
+
+    # Head-to-head matrix
+    h2h: Dict[Tuple[str, str], Dict[str, int]] = {}
+
+    games: List[Dict[str, Any]] = []
+    results_raw: List[GameResult] = []
+    total_scheduled = 0
+    caps_relaxed = False
+
+    # Progress tracker
+    tracker = None if verbose else TournamentProgressTracker(num_games, max_moves)
+
+    def can_schedule_pair(a: str, b: str) -> bool:
+        if a == b:
+            return False
+        if not caps_relaxed and max_games_per_agent > 0:
+            if agent_states[a].games >= max_games_per_agent:
+                return False
+            if agent_states[b].games >= max_games_per_agent:
+                return False
+        return True
+
+    while total_scheduled < num_games:
+        # Determine batch size
+        remaining = num_games - total_scheduled
+        batch_target = min(parallelism, remaining)
+
+        # Select pairs
+        candidate_pairs: List[Tuple[str, str, float]] = []
+        for a, b in combinations(agent_specs, 2):
+            if not can_schedule_pair(a, b):
+                continue
+            qa = trueskill.quality_1vs1(agent_states[a].rating, agent_states[b].rating)
+            candidate_pairs.append((a, b, qa))
+        # Sort by quality descending
+        candidate_pairs.sort(key=lambda x: x[2], reverse=True)
+
+        batch = []
+        used = set()
+        for a, b, q in candidate_pairs:
+            if len(batch) >= batch_target:
+                break
+            if a in used or b in used:
+                continue
+            a_state = agent_states[a]
+            b_state = agent_states[b]
+            white_spec, black_spec = _choose_colors_soft_balance(a_state, b_state)
+            batch.append((a, b, white_spec, black_spec))
+            used.add(a)
+            used.add(b)
+
+        # If we cannot fill any game, relax caps once and retry; otherwise stop
+        if len(batch) == 0:
+            if not caps_relaxed and max_games_per_agent > 0:
+                caps_relaxed = True
+                continue
+            else:
+                # Impossible to schedule more games
+                break
+
+        # Run batch
+        args_list = []
+        for i, (a, b, w, bl) in enumerate(batch):
+            gid = total_scheduled + i + 1
+            args_list.append((gid, a, b, max_moves, time_limit, False if tracker else verbose, tracker, w, bl))
+
+        batch_results = p_map(
+            lambda args: play_single_game(*args[:7], force_white_spec=args[7], force_black_spec=args[8]),
+            args_list,
+            num_cpus=min(len(args_list), parallelism),
+        )
+
+        # Update states and persist PGNs
+        for (a, b, w_spec, b_spec), gr in zip(batch, batch_results):
+            # Persist PGN
+            ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            res_code = _result_to_code(gr.result)
+            meta = f"{gr.white_agent}|{gr.black_agent}|{gr.moves_played}|{gr.final_fen}|{len(gr.pgn_content)}"
+            h8 = hashlib.sha256(meta.encode("utf-8")).hexdigest()[:8]
+            fname = f"{ts}-g{gr.game_id}-{gr.white_agent}-vs-{gr.black_agent}-{res_code}-{h8}.pgn"
+            fpath = pgn_dir / fname
+            try:
+                with open(fpath, "w", encoding="utf-8") as f:
+                    f.write(gr.pgn_content)
+                gr.pgn_path = str(fpath)
+            except Exception:
+                gr.pgn_path = ""
+
+            results_raw.append(gr)
+
+            # Determine outcome for ratings and stats
+            a_state = agent_states[a]
+            b_state = agent_states[b]
+            # Update color counts and games
+            if w_spec == a:
+                a_state.as_white += 1
+                b_state.as_black += 1
+            else:
+                b_state.as_white += 1
+                a_state.as_black += 1
+            a_state.games += 1
+            b_state.games += 1
+
+            # Engine metrics aggregation (per-game averages per side)
+            if gr.white_agent == a:
+                a_state.accuracy_sum += gr.white_accuracy_pct
+                a_state.acpl_sum += gr.white_acpl
+                b_state.accuracy_sum += gr.black_accuracy_pct
+                b_state.acpl_sum += gr.black_acpl
+            else:
+                b_state.accuracy_sum += gr.white_accuracy_pct
+                b_state.acpl_sum += gr.white_acpl
+                a_state.accuracy_sum += gr.black_accuracy_pct
+                a_state.acpl_sum += gr.black_acpl
+
+            # Illegal attempts aggregation
+            if gr.white_agent == a:
+                a_state.illegal_attempts_sum += getattr(gr, 'white_illegal_attempts', 0)
+                a_state.move_attempts_sum += getattr(gr, 'white_move_attempts', 0)
+                b_state.illegal_attempts_sum += getattr(gr, 'black_illegal_attempts', 0)
+                b_state.move_attempts_sum += getattr(gr, 'black_move_attempts', 0)
+            else:
+                b_state.illegal_attempts_sum += getattr(gr, 'white_illegal_attempts', 0)
+                b_state.move_attempts_sum += getattr(gr, 'white_move_attempts', 0)
+                a_state.illegal_attempts_sum += getattr(gr, 'black_illegal_attempts', 0)
+                a_state.move_attempts_sum += getattr(gr, 'black_move_attempts', 0)
+
+            # Update ratings
+            a_rating = a_state.rating
+            b_rating = b_state.rating
+            # Decide winner
+            is_draw = "Draw" in gr.result
+            white_wins = "White wins" in gr.result
+            black_wins = "Black wins" in gr.result
+            # Map to r_white, r_black in current game
+            r_white = a_rating if w_spec == a else b_rating
+            r_black = b_rating if w_spec == a else a_rating
+            if is_draw:
+                new_white, new_black = trueskill.rate_1vs1(r_white, r_black, drawn=True)
+            elif white_wins:
+                new_white, new_black = trueskill.rate_1vs1(r_white, r_black)
+            else:
+                new_black, new_white = trueskill.rate_1vs1(r_black, r_white)
+            # Assign back
+            if w_spec == a:
+                a_state.rating = new_white
+                b_state.rating = new_black
+            else:
+                b_state.rating = new_white
+                a_state.rating = new_black
+
+            # W/L/D counters
+            if is_draw:
+                a_state.draws += 1
+                b_state.draws += 1
+                a_result_side = "draw"
+                b_result_side = "draw"
+                winner_spec = None
+            else:
+                white_side_spec = w_spec
+                winner_spec = white_side_spec if white_wins else (b if white_side_spec == a else a)
+                if winner_spec == a:
+                    a_state.wins += 1
+                    b_state.losses += 1
+                    a_result_side = "win"
+                    b_result_side = "loss"
+                else:
+                    b_state.wins += 1
+                    a_state.losses += 1
+                    a_result_side = "loss"
+                    b_result_side = "win"
+
+            # H2H update (store ordered pair key)
+            key = tuple(sorted([a, b]))
+            if key not in h2h:
+                h2h[key] = {"a_wins": 0, "b_wins": 0, "draws": 0}
+            if is_draw:
+                h2h[key]["draws"] += 1
+            else:
+                if winner_spec == key[0]:
+                    h2h[key]["a_wins"] += 1
+                else:
+                    h2h[key]["b_wins"] += 1
+
+            # Game record for JSON
+            games.append({
+                "id": gr.game_id,
+                "white_agent_spec": gr.white_agent,
+                "black_agent_spec": gr.black_agent,
+                "result": _result_to_code(gr.result),
+                "game_over_reason": gr.game_over_reason,
+                "moves_played": gr.moves_played,
+                "final_fen": gr.final_fen,
+                "engine_metrics": {
+                    "white_accuracy_pct": gr.white_accuracy_pct,
+                    "black_accuracy_pct": gr.black_accuracy_pct,
+                    "white_acpl": gr.white_acpl,
+                    "black_acpl": gr.black_acpl,
+                },
+            "illegal_metrics": {
+                "white_illegal_attempts": gr.white_illegal_attempts,
+                "black_illegal_attempts": gr.black_illegal_attempts,
+                "white_move_attempts": gr.white_move_attempts,
+                "black_move_attempts": gr.black_move_attempts,
+            },
+                "pgn_path": gr.pgn_path,
+            })
+
+            # Histories
+            agent_states[a].history.append({
+                "game_id": gr.game_id,
+                "opponent": b,
+                "color": "white" if w_spec == a else "black",
+                "result": a_result_side,
+                "pgn_path": gr.pgn_path,
+            })
+            agent_states[b].history.append({
+                "game_id": gr.game_id,
+                "opponent": a,
+                "color": "white" if w_spec == b else "black",
+                "result": b_result_side,
+                "pgn_path": gr.pgn_path,
+            })
+
+        total_scheduled += len(batch_results)
+
+        # Show progress display at end of batch
+        if tracker:
+            console = Console()
+            console.print(tracker.render_progress_display())
+
+    # Build standings
+    standings = []
+    for spec, st in agent_states.items():
+        standings.append({
+            "agent": spec,
+            "rating": {
+                "mu": st.rating.mu,
+                "sigma": st.rating.sigma,
+                "conservative": st.conservative,
+            },
+            "totals": {
+                "games": st.games,
+                "as_white": st.as_white,
+                "as_black": st.as_black,
+                "wins": st.wins,
+                "losses": st.losses,
+                "draws": st.draws,
+            },
+            "engine_metrics_avg": {
+                "accuracy_pct": (st.accuracy_sum / st.games) if st.games else 0.0,
+                "acpl": (st.acpl_sum / st.games) if st.games else 0.0,
+            },
+            "win_rate": (st.wins + 0.5 * st.draws) / st.games if st.games else 0.0,
+            "illegal_metrics": {
+                "attempts": st.illegal_attempts_sum,
+                "move_attempts": st.move_attempts_sum,
+                "illegal_pct": (st.illegal_attempts_sum / st.move_attempts_sum * 100.0) if st.move_attempts_sum else 0.0,
+            },
+        })
+    standings.sort(key=lambda x: x["rating"]["conservative"], reverse=True)
+
+    # Agents section
+    agents_json = {}
+    for spec, st in agent_states.items():
+        agents_json[spec] = {
+            "rating": {
+                "mu": st.rating.mu,
+                "sigma": st.rating.sigma,
+                "conservative": st.conservative,
+            },
+            "totals": {
+                "games": st.games,
+                "as_white": st.as_white,
+                "as_black": st.as_black,
+                "wins": st.wins,
+                "losses": st.losses,
+                "draws": st.draws,
+            },
+            "engine_metrics_avg": {
+                "accuracy_pct": (st.accuracy_sum / st.games) if st.games else 0.0,
+                "acpl": (st.acpl_sum / st.games) if st.games else 0.0,
+            },
+            "illegal_metrics": {
+                "attempts": st.illegal_attempts_sum,
+                "move_attempts": st.move_attempts_sum,
+                "illegal_pct": (st.illegal_attempts_sum / st.move_attempts_sum * 100.0) if st.move_attempts_sum else 0.0,
+            },
+            "history": st.history,
+        }
+
+    # H2H matrix optional
+    h2h_matrix = {}
+    for (a, b), d in h2h.items():
+        h2h_matrix[f"{a}__vs__{b}"] = d
+
+    # Tournament JSON
+    summary = {
+        "tournament_config": {
+            "agents": agent_specs,
+            "num_games": num_games,
+            "max_games_per_agent": max_games_per_agent,
+            "max_moves": max_moves,
+            "time_limit": time_limit,
+            "parallelism": parallelism,
+            "scheduler": scheduler,
+            "output_dir": str(out_dir),
+            "caps_relaxed": caps_relaxed,
+            "games_played": total_scheduled,
+        },
+        "agents": agents_json,
+        "games": games,
+        "standings": standings,
+        "h2h_matrix": h2h_matrix,
+    }
+
+    with open(out_dir / "tournament.json", "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+
+    print(f"💾 Tournament JSON saved to: {out_dir / 'tournament.json'}")
+    print(f"💾 PGNs saved to: {pgn_dir}")
+
+    return summary
 
 
 @click.command()
@@ -714,6 +1161,12 @@ def print_summary_stats(stats: Dict[str, Any], game_results: List[GameResult]):
     "--agent2", 
     default="stockfish-skill1-depth2",
     help="Second agent specification. OpenAI: 'openai-gpt-4o', 'openai-gpt-4o-mini', 'openai-gpt-5-mini', 'openai-gpt-5'. Stockfish: 'stockfish-skill1-depth2', 'stockfish-skill5-depth10-time1000'. HF (<10B): 'hf-llama-8b', 'hf-qwen-7b', 'hf-mistral-7b', 'hf-phi-3-mini', 'hf-gemma-7b' or full repo id"
+)
+@click.option(
+    "--agent",
+    "agents",
+    multiple=True,
+    help="Repeatable agent spec for N-agent tournament (2+ required for tournament mode)"
 )
 @click.option(
     "--max-moves",
@@ -731,6 +1184,27 @@ def print_summary_stats(stats: Dict[str, Any], game_results: List[GameResult]):
     help="Number of games to play"
 )
 @click.option(
+    "--max-games-per-agent",
+    default=0,
+    help="Soft cap on games per agent (0 = unlimited)"
+)
+@click.option(
+    "--output-dir",
+    default="tournament_out",
+    help="Directory to store per-game PGNs and tournament.json (tournament mode)"
+)
+@click.option(
+    "--scheduler",
+    type=click.Choice(["trueskill", "round_robin"]),
+    default="trueskill",
+    help="Pairing scheduler for tournament mode"
+)
+@click.option(
+    "--parallelism",
+    default=0,
+    help="Parallel games per batch (default: min(CPU, remaining games), at least 1)"
+)
+@click.option(
     "--verbose",
     is_flag=True,
     help="Enable verbose output for individual games"
@@ -738,102 +1212,128 @@ def print_summary_stats(stats: Dict[str, Any], game_results: List[GameResult]):
 @click.option(
     "--output",
     default="games.pgn",
-    help="Output PGN filename for combined games"
+    help="Output PGN filename for combined games (duel mode only)"
 )
 def main(
     agent1: str,
     agent2: str,
+    agents: Tuple[str, ...],
     max_moves: int,
     time_limit: float,
     num_games: int,
+    max_games_per_agent: int,
+    output_dir: str,
+    scheduler: str,
+    parallelism: int,
     verbose: bool,
     output: str
 ):
     """Run multiple chess games between configured agents with CLI options."""
     
-    # Check if OpenAI API key is available if using OpenAI agent
-    if "openai" in agent1 or "openai" in agent2:
-        if not os.getenv("OPENAI_API_KEY"):
-            print("❌ Error: OPENAI_API_KEY environment variable not set")
-            print("Please set your OpenAI API key in a .env file or environment variable")
-            return
-    # Check HF token if using HF agent
-    if "hf-" in agent1 or "hf-" in agent2:
-        if not (os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.getenv("HF_TOKEN")):
-            print("❌ Error: HUGGINGFACEHUB_API_TOKEN or HF_TOKEN environment variable not set")
-            print("Please set your Hugging Face token in a .env file or environment variable")
-            return
-    
-    print("=== Multi-Game Chess Tournament ===")
-    print(f"🎮 Agent 1: {agent1}")
-    print(f"🎮 Agent 2: {agent2}")
-    print(f"📊 Number of Games: {num_games}")
-    print(f"⏱️  Max Moves per Game: {max_moves}")
-    print(f"⏰ Time Limit per Move: {time_limit}s")
-    print(f"🔊 Verbose: {verbose}")
-    print(f"💾 Output File: {output}")
-    print()
-    
-    # Run games with parallel execution (handles both single and multiple games efficiently)
-    print(f"🚀 Running {num_games} game{'s' if num_games > 1 else ''}...")
-    
-    if num_games > 1 and not verbose:
-        # Use progress tracker for multiple games
-        progress_tracker = TournamentProgressTracker(num_games, max_moves)
-        
-        # Prepare arguments for parallel execution with progress tracker
-        game_args = [
-            (i + 1, agent1, agent2, max_moves, time_limit, verbose, progress_tracker)
-            for i in range(num_games)
-        ]
-        
-        # Run games in parallel with progress display
-        print("\n📊 Progress will be shown during execution...")
-        
-        # Run games in parallel
-        game_results = p_map(
-            lambda args: play_single_game(*args),
-            game_args,
-            num_cpus=min(num_games, os.cpu_count() or 1)
+    # Tournament mode detection
+    agents_list = list(agents)
+    if len(agents_list) >= 2:
+        print("=== N-agent TrueSkill Tournament ===")
+        print(f"👥 Agents ({len(agents_list)}): {', '.join(agents_list)}")
+        print(f"📊 Target Games: {num_games}")
+        print(f"⏱️  Max Moves per Game: {max_moves}")
+        print(f"⏰ Time Limit per Move: {time_limit}s")
+        print(f"🗂️  Output Dir: {output_dir}")
+        print(f"🧮 Scheduler: {scheduler}")
+        print(f"🎯 Max Games/Agent (soft): {max_games_per_agent or 'unlimited'}")
+
+        # API key checks for included agent specs
+        if any("openai" in a for a in agents_list):
+            if not os.getenv("OPENAI_API_KEY"):
+                print("❌ Error: OPENAI_API_KEY environment variable not set")
+                return
+        if any("hf-" in a for a in agents_list):
+            if not (os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.getenv("HF_TOKEN")):
+                print("❌ Error: HUGGINGFACEHUB_API_TOKEN or HF_TOKEN environment variable not set")
+                return
+
+        # Determine parallelism
+        cpu_count = os.cpu_count() or 1
+        if parallelism and parallelism > 0:
+            par = max(1, parallelism)
+        else:
+            par = max(1, min(cpu_count, num_games))
+
+        summary = run_tournament(
+            agent_specs=agents_list,
+            num_games=num_games,
+            max_moves=max_moves,
+            time_limit=time_limit,
+            scheduler=scheduler,
+            parallelism=par,
+            output_dir=output_dir,
+            max_games_per_agent=max_games_per_agent,
+            verbose=verbose,
         )
-        
-        # Show final progress summary
-        print("\n" + "=" * 80)
-        print("📊 FINAL PROGRESS SUMMARY")
-        print("=" * 80)
-        # Update progress tracker with final results
-        for result in game_results:
-            if result.result != "ERROR":
-                # Ensure the game is marked as completed and final moves are recorded
-                progress_tracker.mark_game_completed(result.game_id)
-                progress_tracker.update_game_progress(result.game_id, result.moves_played)
-        
-        console = Console()
-        console.print(progress_tracker.render_progress_display())
+        return summary
     else:
-        # Standard execution for single game or verbose mode
-        game_args = [
-            (i + 1, agent1, agent2, max_moves, time_limit, verbose)
-            for i in range(num_games)
-        ]
-        
-        # Run games in parallel
-        game_results = p_map(
-            lambda args: play_single_game(*args),
-            game_args,
-            num_cpus=min(num_games, os.cpu_count() or 1)
-        )
-    
-    # Aggregate results
-    stats = aggregate_results(game_results)
-    
-    # Save combined PGN
-    save_combined_pgn(game_results, output)
-    
-    # Print summary
-    print_summary_stats(stats, game_results)
-    
-    return stats
+        # Backward-compatible duel mode
+        print("=== Multi-Game Chess Tournament (Duel Mode) ===")
+        print(f"🎮 Agent 1: {agent1}")
+        print(f"🎮 Agent 2: {agent2}")
+        print(f"📊 Number of Games: {num_games}")
+        print(f"⏱️  Max Moves per Game: {max_moves}")
+        print(f"⏰ Time Limit per Move: {time_limit}s")
+        print(f"🔊 Verbose: {verbose}")
+        print(f"💾 Output File: {output}")
+        print()
+
+        # Check if OpenAI API key is available if using OpenAI agent
+        if "openai" in agent1 or "openai" in agent2:
+            if not os.getenv("OPENAI_API_KEY"):
+                print("❌ Error: OPENAI_API_KEY environment variable not set")
+                print("Please set your OpenAI API key in a .env file or environment variable")
+                return
+        # Check HF token if using HF agent
+        if "hf-" in agent1 or "hf-" in agent2:
+            if not (os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.getenv("HF_TOKEN")):
+                print("❌ Error: HUGGINGFACEHUB_API_TOKEN or HF_TOKEN environment variable not set")
+                print("Please set your Hugging Face token in a .env file or environment variable")
+                return
+
+        print(f"🚀 Running {num_games} game{'s' if num_games > 1 else ''}...")
+
+        if num_games > 1 and not verbose:
+            progress_tracker = TournamentProgressTracker(num_games, max_moves)
+            game_args = [
+                (i + 1, agent1, agent2, max_moves, time_limit, verbose, progress_tracker)
+                for i in range(num_games)
+            ]
+            print("\n📊 Progress will be shown during execution...")
+            game_results = p_map(
+                lambda args: play_single_game(*args),
+                game_args,
+                num_cpus=min(num_games, os.cpu_count() or 1)
+            )
+            print("\n" + "=" * 80)
+            print("📊 FINAL PROGRESS SUMMARY")
+            print("=" * 80)
+            for result in game_results:
+                if result.result != "ERROR":
+                    progress_tracker.mark_game_completed(result.game_id)
+                    progress_tracker.update_game_progress(result.game_id, result.moves_played)
+            console = Console()
+            console.print(progress_tracker.render_progress_display())
+        else:
+            game_args = [
+                (i + 1, agent1, agent2, max_moves, time_limit, verbose)
+                for i in range(num_games)
+            ]
+            game_results = p_map(
+                lambda args: play_single_game(*args),
+                game_args,
+                num_cpus=min(num_games, os.cpu_count() or 1)
+            )
+
+        stats = aggregate_results(game_results)
+        save_combined_pgn(game_results, output)
+        print_summary_stats(stats, game_results)
+        return stats
 
 
 if __name__ == "__main__":

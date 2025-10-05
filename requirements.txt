@@ -10,3 +10,4 @@ black>=23.0.0
 flake8>=6.0.0
 mypy>=1.0.0
 huggingface_hub>=0.24.0
+trueskill>=0.4.5

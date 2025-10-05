@@ -106,11 +106,11 @@ Examples: <uci_move>e2e4</uci_move>, <uci_move>g1f3</uci_move>, <uci_move>e1g1</
                 "Hugging Face API token not provided. Set HUGGINGFACEHUB_API_TOKEN or HF_TOKEN."
             )
 
-        self.client = InferenceClient(token=self.api_token)
-
         self.model = model or os.environ.get("HF_MODEL", "deepseek-ai/DeepSeek-V3-0324")
         self.max_tokens = max_tokens or int(os.environ.get("HF_MAX_TOKENS", "64"))
         self.timeout = timeout or float(os.environ.get("HF_TIMEOUT", "30.0"))
+        # Configure client-level timeout instead of per-call
+        self.client = InferenceClient(token=self.api_token, timeout=self.timeout)
         self.retry_attempts = retry_attempts
         self.retry_delay = retry_delay
 
@@ -229,28 +229,104 @@ Examples: <uci_move>e2e4</uci_move>, <uci_move>g1f3</uci_move>, <uci_move>e1g1</
         return prompt
 
     def _call_hf_api(self, prompt: str) -> str:
+        """Call HF Inference API with fallbacks and clearer errors.
+
+        Order of attempts per try:
+          1) OpenAI-style client.chat.completions.create
+          2) InferenceClient.chat_completion
+          3) InferenceClient.text_generation
+        """
         last_error = None
+        # Prepare per-method parameter sets
+        base_params = dict(self.generation_params)
+        # Remove None values if any
+        base_params = {k: v for k, v in base_params.items() if v is not None}
+
+        # OpenAI-style and chat_completion prefer max_tokens
+        params_chat_like = dict(base_params)
+        if "max_new_tokens" in params_chat_like:
+            params_chat_like.pop("max_new_tokens", None)
+
+        # text_generation prefers max_new_tokens
+        params_text = dict(base_params)
+        if "max_new_tokens" not in params_text and "max_tokens" in params_text:
+            try:
+                params_text["max_new_tokens"] = int(params_text["max_tokens"])  # map if only max_tokens provided
+            except Exception:
+                pass
+        # text_generation does not accept max_tokens
+        params_text.pop("max_tokens", None)
+
+        messages = [{"role": "user", "content": prompt}]
+
         for attempt in range(self.retry_attempts):
             try:
-                completion = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[{"role": "user", "content": prompt}],
-                    timeout=self.timeout,
-                    **self.generation_params,
-                )
-                if completion and completion.choices and completion.choices[0].message:
-                    content = completion.choices[0].message.content
-                    if content is None:
-                        raise ValueError("Empty content from HF API")
-                    return content.strip()
-                raise ValueError("Empty response from HF API")
+                # 1) Try OpenAI-compatible endpoint if available
+                if getattr(self.client, "chat", None) is not None and getattr(self.client.chat, "completions", None) is not None and hasattr(self.client.chat.completions, "create"):
+                    completion = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        **params_chat_like,
+                    )
+                    # Try attribute-style, then dict-style
+                    choice0 = getattr(completion, "choices", None)
+                    if not choice0 and isinstance(completion, dict):
+                        choice0 = completion.get("choices")
+                    if choice0:
+                        msg = getattr(choice0[0], "message", None)
+                        if not msg and isinstance(choice0[0], dict):
+                            msg = choice0[0].get("message")
+                        content = getattr(msg, "content", None) if msg is not None else None
+                        if not content and isinstance(msg, dict):
+                            content = msg.get("content")
+                        if content:
+                            return str(content).strip()
+                        raise ValueError("Empty content from HF chat.completions")
+
+                # 2) Try native chat_completion
+                if hasattr(self.client, "chat_completion"):
+                    completion = self.client.chat_completion(
+                        model=self.model,
+                        messages=messages,
+                        **params_chat_like,
+                    )
+                    choices = getattr(completion, "choices", None)
+                    if not choices and isinstance(completion, dict):
+                        choices = completion.get("choices")
+                    if choices:
+                        msg = getattr(choices[0], "message", None)
+                        if not msg and isinstance(choices[0], dict):
+                            msg = choices[0].get("message")
+                        content = getattr(msg, "content", None) if msg is not None else None
+                        if not content and isinstance(msg, dict):
+                            content = msg.get("content")
+                        if content:
+                            return str(content).strip()
+                        raise ValueError("Empty content from HF chat_completion")
+
+                # 3) Fallback to text generation
+                if hasattr(self.client, "text_generation"):
+                    text = self.client.text_generation(
+                        prompt,
+                        model=self.model,
+                        return_full_text=False,
+                        **params_text,
+                    )
+                    if text and isinstance(text, str):
+                        return text.strip()
+                    raise ValueError("Empty content from HF text_generation")
+
+                raise RuntimeError("No suitable HF API method available on InferenceClient")
+
             except Exception as e:
                 last_error = e
                 if attempt < self.retry_attempts - 1:
                     time.sleep(self.retry_delay)
                     continue
                 break
-        raise Exception(f"HF API call failed after {self.retry_attempts} attempts: {last_error}")
+
+        err_str = f"{type(last_error).__name__}: {last_error}" if last_error else "Unknown error"
+        raise Exception(f"HF API call failed after {self.retry_attempts} attempts: {err_str}")
 
     def _parse_move(self, response: str, legal_moves: List[chess.Move]) -> chess.Move:
         response = response.strip()

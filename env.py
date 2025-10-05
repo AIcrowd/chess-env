@@ -39,6 +39,11 @@ class ChessEnvironment:
         self.move_history = []
         self.move_comments = []  # Store comments for each move
         self.game_result = None
+        # Track illegal move attempts and total move attempts (excluding resignations)
+        self.white_illegal_attempts = 0
+        self.black_illegal_attempts = 0
+        self.white_move_attempts = 0
+        self.black_move_attempts = 0
         
         # Set initial position if provided
         if initial_fen is not None:
@@ -57,6 +62,11 @@ class ChessEnvironment:
         self.move_comments = []
         self.game_result = None
         self._initial_fen = fen
+        # Reset attempt counters
+        self.white_illegal_attempts = 0
+        self.black_illegal_attempts = 0
+        self.white_move_attempts = 0
+        self.black_move_attempts = 0
 
     def get_legal_moves(self) -> List[chess.Move]:
         """Get all legal moves for the current position."""
@@ -207,10 +217,22 @@ class ChessEnvironment:
 
             # Validate and play the move
             if move in legal_moves:
+                # Count this as an attempted move for the side
+                if side == "White":
+                    self.white_move_attempts += 1
+                else:
+                    self.black_move_attempts += 1
                 self.play_move(move, comment)
                 return move
             else:
                 print(f"Warning: {side} returned illegal move {move}")
+                # Count this as an attempted move and an illegal attempt for the side
+                if side == "White":
+                    self.white_move_attempts += 1
+                    self.white_illegal_attempts += 1
+                else:
+                    self.black_move_attempts += 1
+                    self.black_illegal_attempts += 1
                 return None
 
         except Exception as e:
@@ -325,6 +347,11 @@ class ChessEnvironment:
             "game_over_reason": (
                 self.get_game_termination_reason() if self.is_game_over() else "max_moves"
             ),
+            # Illegal move attempt statistics
+            "white_illegal_attempts": self.white_illegal_attempts,
+            "black_illegal_attempts": self.black_illegal_attempts,
+            "white_move_attempts": self.white_move_attempts,
+            "black_move_attempts": self.black_move_attempts,
         }
 
         return game_stats
@@ -441,14 +468,28 @@ class ChessEnvironment:
                     san_moves.append(uci_move)
                 temp_board.push(move)
         
+        # Derive display names including model identifiers when available
+        def _agent_display_name(agent_obj: Any) -> str:
+            try:
+                # Prefer explicit model attribute if present (HF/OpenAI agents)
+                model_id = getattr(agent_obj, "model", None)
+                if model_id:
+                    return f"{agent_obj.__class__.__name__} ({model_id})"
+            except Exception:
+                pass
+            return agent_obj.__class__.__name__
+
+        white_name = _agent_display_name(self.agent1)
+        black_name = _agent_display_name(self.agent2)
+
         # Basic PGN headers
         pgn_lines = [
             '[Event "Chess Game"]',
             f'[Site "Chess Environment"]',
             f'[Date "{self._get_current_date()}"]',
             f'[Round "1"]',
-            f'[White "{self.agent1.__class__.__name__}"]',
-            f'[Black "{self.agent2.__class__.__name__}"]',
+            f'[White "{white_name}"]',
+            f'[Black "{black_name}"]',
             f'[Result "{self._get_pgn_result()}"]',
         ]
         
