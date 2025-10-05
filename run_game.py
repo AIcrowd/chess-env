@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+import chess
+import chess.engine
 import click
 from p_tqdm import p_map
 from rich.console import Console
@@ -48,6 +50,100 @@ class GameResult:
     game_over_reason: str
     final_fen: str
     pgn_content: str
+    # Per-game engine-based metrics (averaged per side)
+    white_accuracy_pct: float = 0.0
+    black_accuracy_pct: float = 0.0
+    white_acpl: float = 0.0
+    black_acpl: float = 0.0
+
+
+class _StockfishAnalyzer:
+    """Lightweight Stockfish-based analyzer to compute engine-match accuracy and ACPL.
+
+    Accuracy is defined as percentage of moves that match Stockfish's top choice at
+    the configured search settings. ACPL (Average Centipawn Loss) is computed from
+    the pre-move and post-move evaluations from White's perspective.
+    """
+
+    def __init__(self, stockfish_path: str | None = None, depth: int = 10, movetime_ms: int = 30):
+        path = stockfish_path or os.getenv("STOCKFISH_PATH") or "stockfish"
+        # Start UCI engine via python-chess
+        self.engine = chess.engine.SimpleEngine.popen_uci(path)
+        self.depth = depth
+        self.movetime_ms = movetime_ms
+
+    def _set_position(self, board: chess.Board):
+        # No-op for python-chess engine; it uses the board passed to analyse/play
+        pass
+
+    def _best_move(self, board: chess.Board) -> str | None:
+        limit = chess.engine.Limit(time=self.movetime_ms / 1000.0) if self.movetime_ms else chess.engine.Limit(depth=self.depth)
+        result = self.engine.play(board, limit)
+        return result.move.uci() if result and result.move else None
+
+    def _eval_cp_white_pov(self, board: chess.Board) -> int:
+        limit = chess.engine.Limit(time=self.movetime_ms / 1000.0) if self.movetime_ms else chess.engine.Limit(depth=self.depth)
+        info = self.engine.analyse(board, limit)
+        score = info.get("score")
+        if score is None:
+            return 0
+        # Convert to centipawns from White POV; map mates to capped cp
+        cp = score.white().score(mate_score=1000)
+        return int(cp if cp is not None else 0)
+
+    def analyze_game(self, moves_uci: list[str], initial_fen: str | None = None) -> dict:
+        board = chess.Board(initial_fen) if initial_fen else chess.Board()
+        white_moves = 0
+        black_moves = 0
+        white_matches = 0
+        black_matches = 0
+        white_cpl_sum = 0
+        black_cpl_sum = 0
+
+        try:
+            for uci in moves_uci:
+                # Evaluate before the move
+                eval_before = self._eval_cp_white_pov(board)
+                best = self._best_move(board)
+
+                move = chess.Move.from_uci(uci)
+                is_white = board.turn  # True if White to move
+
+                if best and best == uci:
+                    if is_white:
+                        white_matches += 1
+                    else:
+                        black_matches += 1
+
+                # Apply actual move and evaluate resulting position
+                board.push(move)
+                eval_after = self._eval_cp_white_pov(board)
+
+                if is_white:
+                    white_moves += 1
+                    cpl = max(0, eval_before - eval_after)
+                    white_cpl_sum += cpl
+                else:
+                    black_moves += 1
+                    cpl = max(0, eval_after - eval_before)
+                    black_cpl_sum += cpl
+
+            white_accuracy = (white_matches / white_moves * 100.0) if white_moves else 0.0
+            black_accuracy = (black_matches / black_moves * 100.0) if black_moves else 0.0
+            white_acpl = (white_cpl_sum / white_moves) if white_moves else 0.0
+            black_acpl = (black_cpl_sum / black_moves) if black_moves else 0.0
+
+            return {
+                "white_accuracy_pct": white_accuracy,
+                "black_accuracy_pct": black_accuracy,
+                "white_acpl": white_acpl,
+                "black_acpl": black_acpl,
+            }
+        finally:
+            try:
+                self.engine.quit()
+            except Exception:
+                pass
 
 
 class TournamentProgressTracker:
@@ -336,6 +432,18 @@ def play_single_game(
         # Generate PGN content
         pgn_content = env._generate_pgn_content(include_metadata=True)
         
+        # Compute engine-based accuracy metrics
+        try:
+            analyzer = _StockfishAnalyzer()
+            analysis = analyzer.analyze_game(result.get('move_history', []))
+        except Exception:
+            analysis = {
+                "white_accuracy_pct": 0.0,
+                "black_accuracy_pct": 0.0,
+                "white_acpl": 0.0,
+                "black_acpl": 0.0,
+            }
+
         # Create game result
         game_result = GameResult(
             game_id=game_id,
@@ -345,7 +453,11 @@ def play_single_game(
             black_agent=black_name,
             game_over_reason=result['game_over_reason'],
             final_fen=result['final_fen'],
-            pgn_content=pgn_content
+            pgn_content=pgn_content,
+            white_accuracy_pct=analysis["white_accuracy_pct"],
+            black_accuracy_pct=analysis["black_accuracy_pct"],
+            white_acpl=analysis["white_acpl"],
+            black_acpl=analysis["black_acpl"],
         )
         
         # Mark game as completed in progress tracker
@@ -399,6 +511,11 @@ def aggregate_results(game_results: List[GameResult]) -> Dict[str, Any]:
     agent_black_games = {}
     total_moves = 0
     successful_games = 0
+    # Accuracy aggregates
+    agent_accuracy_sum = {}
+    agent_accuracy_count = {}
+    agent_acpl_sum = {}
+    agent_acpl_count = {}
     
     for result in game_results:
         if result.result == "ERROR":
@@ -414,6 +531,10 @@ def aggregate_results(game_results: List[GameResult]) -> Dict[str, Any]:
                 agent_wins[agent] = 0
                 agent_white_games[agent] = 0
                 agent_black_games[agent] = 0
+                agent_accuracy_sum[agent] = 0.0
+                agent_accuracy_count[agent] = 0
+                agent_acpl_sum[agent] = 0.0
+                agent_acpl_count[agent] = 0
             agent_games[agent] += 1
             
             # Count white/black assignments
@@ -421,6 +542,17 @@ def aggregate_results(game_results: List[GameResult]) -> Dict[str, Any]:
                 agent_white_games[agent] += 1
             else:
                 agent_black_games[agent] += 1
+
+        # Accumulate accuracy and ACPL per agent (per game averages)
+        agent_accuracy_sum[result.white_agent] += result.white_accuracy_pct
+        agent_accuracy_count[result.white_agent] += 1
+        agent_acpl_sum[result.white_agent] += result.white_acpl
+        agent_acpl_count[result.white_agent] += 1
+
+        agent_accuracy_sum[result.black_agent] += result.black_accuracy_pct
+        agent_accuracy_count[result.black_agent] += 1
+        agent_acpl_sum[result.black_agent] += result.black_acpl
+        agent_acpl_count[result.black_agent] += 1
         
         # Count wins, draws, and other outcomes
         if "wins" in result.result:
@@ -442,13 +574,24 @@ def aggregate_results(game_results: List[GameResult]) -> Dict[str, Any]:
         "agent_games": agent_games,
         "agent_white_games": agent_white_games,
         "agent_black_games": agent_black_games,
-        "win_rates": {}
+        "win_rates": {},
+        "agent_avg_accuracy_pct": {},
+        "agent_avg_acpl": {},
     }
     
     # Calculate win rates
     for agent, wins in agent_wins.items():
         games_played = agent_games.get(agent, 0)
         stats["win_rates"][agent] = (wins / games_played * 100) if games_played > 0 else 0
+        # Accuracy/ACPL averages
+        if agent_accuracy_count.get(agent, 0) > 0:
+            stats["agent_avg_accuracy_pct"][agent] = agent_accuracy_sum[agent] / agent_accuracy_count[agent]
+        else:
+            stats["agent_avg_accuracy_pct"][agent] = 0.0
+        if agent_acpl_count.get(agent, 0) > 0:
+            stats["agent_avg_acpl"][agent] = agent_acpl_sum[agent] / agent_acpl_count[agent]
+        else:
+            stats["agent_avg_acpl"][agent] = 0.0
     
     return stats
 
@@ -510,6 +653,11 @@ def print_summary_stats(stats: Dict[str, Any], game_results: List[GameResult]):
         print(f"   As Black: {black_games}")
         print(f"   Points: {wins}")
         print(f"   Win Rate: {win_rate:.1f}%")
+        # Accuracy details
+        avg_acc = stats.get('agent_avg_accuracy_pct', {}).get(agent, 0.0)
+        avg_acpl = stats.get('agent_avg_acpl', {}).get(agent, 0.0)
+        print(f"   Accuracy (engine match): {avg_acc:.1f}%")
+        print(f"   ACPL: {avg_acpl:.1f}")
         print()
     
     # Print prettified JSON stats
@@ -547,7 +695,9 @@ def print_summary_stats(stats: Dict[str, Any], game_results: List[GameResult]):
             "as_black": black_games,
             "points": wins,  # Can be fractional for draws
             "win_rate": round(win_rate, 2),
-            "win_percentage": f"{win_rate:.1f}%"
+            "win_percentage": f"{win_rate:.1f}%",
+            "avg_accuracy_pct": round(stats.get('agent_avg_accuracy_pct', {}).get(agent, 0.0), 2),
+            "avg_acpl": round(stats.get('agent_avg_acpl', {}).get(agent, 0.0), 2)
         }
     
     # Print prettified JSON using rich
