@@ -91,15 +91,18 @@ class _StockfishAnalyzer:
         result = self.engine.play(board, limit)
         return result.move.uci() if result and result.move else None
 
-    def _eval_cp_white_pov(self, board: chess.Board) -> int:
+    def _eval_cp(self, engine, board):
         limit = chess.engine.Limit(time=self.movetime_ms / 1000.0) if self.movetime_ms else chess.engine.Limit(depth=self.depth)
-        info = self.engine.analyse(board, limit)
-        score = info.get("score")
+        info = engine.analyse(board, limit)
+        score = info["score"].relative
         if score is None:
-            return 0
-        # Convert to centipawns from White POV; map mates to capped cp
-        cp = score.white().score(mate_score=1000)
-        return int(cp if cp is not None else 0)
+            return 0 # TODO: Feels like a silent bug in case this happens?
+        # AI says people find this to be the implementation lichess and chess.com use, both mate and cp are capped at ±1000, mate transtitions not relevant for ACPL
+        cp = score.score(mate_score=1000)
+        if cp is not None:
+            return int(max(-1000, min(1000, cp)))
+        else:
+            return 0 # TODO: Feels like a silent bug in case this happens?
 
     def analyze_game(self, moves_uci: list[str], initial_fen: str | None = None) -> dict:
         board = chess.Board(initial_fen) if initial_fen else chess.Board()
@@ -113,7 +116,8 @@ class _StockfishAnalyzer:
         try:
             for uci in moves_uci:
                 # Evaluate before the move
-                eval_before = self._eval_cp_white_pov(board)
+                # eval_before = self._eval_cp_white_pov(board)
+                eval_before = self._eval_cp(self.engine, board)
                 best = self._best_move(board)
 
                 move = chess.Move.from_uci(uci)
@@ -127,21 +131,22 @@ class _StockfishAnalyzer:
 
                 # Apply actual move and evaluate resulting position
                 board.push(move)
-                eval_after = self._eval_cp_white_pov(board)
+                eval_after = self._eval_cp(self.engine, board)
+
+                # CPL is always: eval_before - eval_after (both from mover's perspective)
+                cpl = max(0, eval_before - eval_after)
 
                 if is_white:
                     white_moves += 1
-                    cpl = max(0, eval_before - eval_after)
                     white_cpl_sum += cpl
                 else:
                     black_moves += 1
-                    cpl = max(0, eval_after - eval_before)
                     black_cpl_sum += cpl
 
             white_accuracy = (white_matches / white_moves * 100.0) if white_moves else 0.0
             black_accuracy = (black_matches / black_moves * 100.0) if black_moves else 0.0
-            white_acpl = (white_cpl_sum / white_moves) if white_moves else 0.0
-            black_acpl = (black_cpl_sum / black_moves) if black_moves else 0.0
+            white_acpl = (white_cpl_sum / white_moves) if white_moves else 1000 # 1000 = MAX_ACPL 
+            black_acpl = (black_cpl_sum / black_moves) if black_moves else 1000 # 1000 = MAX_ACPL
 
             return {
                 "white_accuracy_pct": white_accuracy,
