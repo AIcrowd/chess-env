@@ -206,6 +206,104 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
     
 
     
+    def _build_prompt_context(
+        self,
+        board: chess.Board,
+        legal_moves: List[chess.Move],
+        move_history: List[str],
+        side_to_move: str,
+    ) -> Dict[str, Any]:
+        """
+        Build the context dictionary for Jinja2 template rendering.
+        
+        Args:
+            board: Current chess board state
+            legal_moves: List of legal moves available
+            move_history: List of moves played so far (in UCI notation)
+            side_to_move: Which side is to move ('White' or 'Black')
+            
+        Returns:
+            Dictionary with all template variables (both string and list forms)
+        """
+        # Get FEN representation
+        fen = board.fen()
+        
+        # Get UTF board representation with Unicode chess pieces
+        board_utf = self._render_board_unicode(board)
+        
+        # Get ASCII board representation
+        board_ascii = board.unicode()
+        
+        # Get last move description
+        if board.move_stack:
+            last_move = board.move_stack[-1]
+            # We need to get the SAN before the move was made
+            # Create a temporary board to get the SAN
+            temp_board = chess.Board()
+            for move in board.move_stack[:-1]:
+                temp_board.push(move)
+            last_move_san = temp_board.san(last_move)
+            last_side = "Black" if board.turn else "White"
+            last_move_desc = f"{last_side} played {last_move_san}"
+        else:
+            last_move_desc = "(start of game)"
+        
+        # Format legal moves as both UCI and SAN lists
+        legal_moves_uci_list = [move.uci() for move in legal_moves]
+        legal_moves_san_list = [board.san(move) for move in legal_moves]
+        legal_moves_uci_str = " ".join(legal_moves_uci_list)
+        legal_moves_san_str = " ".join(legal_moves_san_list)
+        
+        # Format move history as both UCI and SAN
+        if move_history:
+            # Move history is already in UCI format
+            move_history_uci_list = list(move_history)
+            move_history_uci_str = " ".join(move_history_uci_list)
+            
+            # Convert UCI moves to SAN if possible
+            try:
+                history_board = chess.Board()
+                move_history_san_list = []
+                for uci_move in move_history:
+                    try:
+                        move = chess.Move.from_uci(uci_move)
+                        san = history_board.san(move)
+                        move_history_san_list.append(san)
+                        history_board.push(move)
+                    except Exception:
+                        move_history_san_list.append(uci_move)
+                
+                move_history_san_str = " ".join(move_history_san_list)
+            except Exception:
+                move_history_san_list = list(move_history)
+                move_history_san_str = " ".join(move_history)
+        else:
+            move_history_uci_list = []
+            move_history_san_list = []
+            move_history_uci_str = "(no moves yet)"
+            move_history_san_str = "(no moves yet)"
+        
+        # Get first legal move as an example
+        first_legal_move = legal_moves_uci_list[0] if legal_moves_uci_list else ""
+        
+        # Build and return the context dictionary
+        return {
+            "board_utf": board_utf,
+            "board_ascii": board_ascii,
+            "FEN": fen,
+            "side_to_move": side_to_move,
+            "last_move": last_move_desc,
+            "legal_moves_uci": legal_moves_uci_str,
+            "legal_moves_san": legal_moves_san_str,
+            "move_history_uci": move_history_uci_str,
+            "move_history_san": move_history_san_str,
+            "legal_moves_uci_list": legal_moves_uci_list,
+            "legal_moves_san_list": legal_moves_san_list,
+            "move_history_uci_list": move_history_uci_list,
+            "move_history_san_list": move_history_san_list,
+            "first_legal_move": first_legal_move,
+        }
+    
     def _format_prompt(
         self,
         board: chess.Board,
@@ -225,74 +323,17 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         Returns:
             Formatted prompt string
         """
-        # Get FEN representation
-        fen = board.fen()
-        
-        # Get UTF board representation with Unicode chess pieces
-        board_utf = self._render_board_unicode(board)
-        
-        # Get last move description
-        if board.move_stack:
-            last_move = board.move_stack[-1]
-            # We need to get the SAN before the move was made
-            # Create a temporary board to get the SAN
-            temp_board = chess.Board()
-            for move in board.move_stack[:-1]:
-                temp_board.push(move)
-            last_move_san = temp_board.san(last_move)
-            last_side = "Black" if board.turn else "White"
-            last_move_desc = f"{last_side} played {last_move_san}"
-        else:
-            last_move_desc = "(start of game)"
-        
-        # Format legal moves as both UCI and SAN lists
-        legal_moves_uci = [move.uci() for move in legal_moves]
-        legal_moves_san = [board.san(move) for move in legal_moves]
-        legal_moves_uci_str = ", ".join(legal_moves_uci)
-        legal_moves_san_str = ", ".join(legal_moves_san)
-        
-        # Format move history as both UCI and SAN
-        if move_history:
-            # Move history is already in UCI format
-            move_history_uci_str = " ".join(move_history)
-            
-            # Convert UCI moves to SAN if possible
-            try:
-                history_board = chess.Board()
-                move_history_san = []
-                for uci_move in move_history:
-                    try:
-                        move = chess.Move.from_uci(uci_move)
-                        san = history_board.san(move)
-                        move_history_san.append(san)
-                        history_board.push(move)
-                    except:
-                        move_history_san.append(uci_move)
-                
-                move_history_san_str = " ".join(move_history_san)
-            except:
-                move_history_san_str = " ".join(move_history)
-        else:
-            move_history_uci_str = "(no moves yet)"
-            move_history_san_str = "(no moves yet)"
+        # Build the context using the shared method
+        context = self._build_prompt_context(board, legal_moves, move_history, side_to_move)
         
         # Format the prompt safely, handling missing placeholders
         try:
-            prompt = self.prompt_template.format(
-                board_utf=board_utf,
-                FEN=fen,
-                last_move=last_move_desc,
-                legal_moves_uci=legal_moves_uci_str,
-                legal_moves_san=legal_moves_san_str,
-                move_history_uci=move_history_uci_str,
-                move_history_san=move_history_san_str,
-                side_to_move=side_to_move
-            )
+            prompt = self.prompt_template.format(**context)
         except KeyError as e:
             # Handle missing placeholders gracefully
             missing_key = str(e).strip("'")
             print(f"Warning: Prompt template references placeholder '{missing_key}' that is not available")
-            print("Available placeholders: board_utf, FEN, last_move, legal_moves_uci, legal_moves_san, move_history_uci, move_history_san, side_to_move")
+            print("Available placeholders: board_utf, board_ascii, FEN, last_move, legal_moves_uci, legal_moves_san, move_history_uci, move_history_san, side_to_move")
             print("Consider updating your template or using the default template")
             
             # Fall back to a minimal template that should always work
@@ -304,7 +345,7 @@ Respond with your move in UCI notation wrapped in <uci_move></uci_move> tags.
 
 Example: <uci_move>e2e4</uci_move>"""
             
-            prompt = fallback_template.format(legal_moves_uci=legal_moves_uci_str)
+            prompt = fallback_template.format(legal_moves_uci=context["legal_moves_uci"])
         
         return prompt
     
@@ -546,6 +587,7 @@ Example: <uci_move>e2e4</uci_move>"""
         
         You can create custom templates with any combination of available placeholders:
         - {board_utf}: Visual board representation with Unicode pieces
+        - {board_ascii}: ASCII board representation
         - {FEN}: FEN notation of the current position
         - {side_to_move}: Which side is to move ('White' or 'Black')
         - {legal_moves_uci}: Available moves in UCI notation
