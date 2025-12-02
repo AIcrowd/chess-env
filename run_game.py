@@ -75,34 +75,51 @@ class _StockfishAnalyzer:
     the pre-move and post-move evaluations from White's perspective.
     """
 
-    def __init__(self, stockfish_path: str | None = None, depth: int = 10, movetime_ms: int = 30):
+    def __init__(self, stockfish_path: str | None = None, depth: int = 20, movetime_ms: int | None = 1000):
         path = stockfish_path or os.getenv("STOCKFISH_PATH") or "stockfish"
         # Start UCI engine via python-chess
         self.engine = chess.engine.SimpleEngine.popen_uci(path)
         self.depth = depth
         self.movetime_ms = movetime_ms
 
-    def _set_position(self, board: chess.Board):
-        # No-op for python-chess engine; it uses the board passed to analyse/play
-        pass
+    def _get_limit(self) -> chess.engine.Limit:
+        """Create engine limit based on configured time or depth."""
+        return chess.engine.Limit(
+                time=self.movetime_ms / 1000.0,
+                depth=self.depth if self.depth else None
+        )
 
-    def _best_move(self, board: chess.Board) -> str | None:
-        limit = chess.engine.Limit(time=self.movetime_ms / 1000.0) if self.movetime_ms else chess.engine.Limit(depth=self.depth)
-        result = self.engine.play(board, limit)
-        return result.move.uci() if result and result.move else None
-
-    def _eval_cp(self, engine, board):
-        limit = chess.engine.Limit(time=self.movetime_ms / 1000.0) if self.movetime_ms else chess.engine.Limit(depth=self.depth)
-        info = engine.analyse(board, limit)
+    def _analyse_position(self, board: chess.Board) -> tuple[int, str | None]:
+        """Analyze position and return (eval_cp, best_move_uci).
+        
+        Returns:
+            tuple[int, str | None]: (centipawn evaluation, best move in UCI format)
+        """
+        limit = self._get_limit()
+        info = self.engine.analyse(board, limit)
+        
+        # Extract evaluation
         score = info["score"].relative
         if score is None:
-            return 0 # TODO: Feels like a silent bug in case this happens?
-        # AI says people find this to be the implementation lichess and chess.com use, both mate and cp are capped at ±1000, mate transtitions not relevant for ACPL
-        cp = score.score(mate_score=1000)
-        if cp is not None:
-            return int(max(-1000, min(1000, cp)))
+            import warnings
+            warnings.warn("Score is None, returning 1000")
+            eval_cp = 1000
         else:
-            return 0 # TODO: Feels like a silent bug in case this happens?
+            # Cap mate and cp scores at ±1000 (similar to lichess/chess.com)
+            cp = score.score(mate_score=1000)
+            if cp is not None:
+                eval_cp = int(max(-1000, min(1000, cp)))
+            else:
+                import warnings
+                warnings.warn("CP score is None after conversion, returning 1000")
+                eval_cp = 1000
+        
+        # Extract best move from principal variation
+        best_move = None
+        if "pv" in info and len(info["pv"]) > 0:
+            best_move = info["pv"][0].uci()
+        
+        return eval_cp, best_move
 
     def analyze_game(self, moves_uci: list[str], initial_fen: str | None = None) -> dict:
         board = chess.Board(initial_fen) if initial_fen else chess.Board()
@@ -115,26 +132,31 @@ class _StockfishAnalyzer:
 
         try:
             for uci in moves_uci:
-                # Evaluate before the move
-                # eval_before = self._eval_cp_white_pov(board)
-                eval_before = self._eval_cp(self.engine, board)
-                best = self._best_move(board)
+                # Analyze position before the move (gets both eval and best move)
+                eval_before, best_move = self._analyse_position(board)
 
                 move = chess.Move.from_uci(uci)
                 is_white = board.turn  # True if White to move
 
-                if best and best == uci:
+                # Check if move matches engine's best move
+                if best_move and best_move == uci:
                     if is_white:
                         white_matches += 1
                     else:
                         black_matches += 1
 
-                # Apply actual move and evaluate resulting position
+                # Apply actual move
                 board.push(move)
-                eval_after = self._eval_cp(self.engine, board)
-
-                # CPL is always: eval_before - eval_after (both from mover's perspective)
-                cpl = max(0, eval_before - eval_after)
+                
+                # Evaluate after the move (from opponent's perspective now)
+                eval_after, _ = self._analyse_position(board)
+                
+                # Convert eval_after to the mover's perspective by negating
+                # (since the turn has flipped)
+                eval_after_mover_pov = -eval_after
+                
+                # CPL is the loss in centipawns from the mover's perspective
+                cpl = max(0, eval_before - eval_after_mover_pov)
 
                 if is_white:
                     white_moves += 1
@@ -145,8 +167,8 @@ class _StockfishAnalyzer:
 
             white_accuracy = (white_matches / white_moves * 100.0) if white_moves else 0.0
             black_accuracy = (black_matches / black_moves * 100.0) if black_moves else 0.0
-            white_acpl = (white_cpl_sum / white_moves) if white_moves else 1000 # 1000 = MAX_ACPL 
-            black_acpl = (black_cpl_sum / black_moves) if black_moves else 1000 # 1000 = MAX_ACPL
+            white_acpl = (white_cpl_sum / white_moves) if white_moves else 1000  # 1000 = MAX_ACPL 
+            black_acpl = (black_cpl_sum / black_moves) if black_moves else 1000  # 1000 = MAX_ACPL
 
             return {
                 "white_accuracy_pct": white_accuracy,
