@@ -13,6 +13,7 @@ import uuid
 
 import openai
 from dotenv import load_dotenv
+from jinja2 import BaseLoader, Environment, TemplateError, meta
 
 import chess
 
@@ -54,20 +55,20 @@ class OpenAIAgent(ChessAgent):
     DEFAULT_PROMPT_TEMPLATE = """You are Magnus Carlsen, a chess grandmaster, with deep strategic understanding. Your task is to analyze the current chess position and select the best move available.
 
 CURRENT BOARD STATE:
-{board_utf}
+{{ board_utf }}
 
 POSITION INFORMATION:
-- FEN notation: {FEN}
-- Side to move: {side_to_move}
-- Last move played: {last_move}
+- FEN notation: {{ FEN }}
+- Side to move: {{ side_to_move }}
+- Last move played: {{ last_move }}
 
 AVAILABLE MOVES:
-- Legal moves in UCI notation: {legal_moves_uci}
-- Legal moves in SAN notation: {legal_moves_san}
+- Legal moves in UCI notation: {{ legal_moves_uci }}
+- Legal moves in SAN notation: {{ legal_moves_san }}
 
 GAME HISTORY:
-- Move history in UCI notation: {move_history_uci}
-- Move history in SAN notation: {move_history_san}
+- Move history in UCI notation: {{ move_history_uci }}
+- Move history in SAN notation: {{ move_history_san }}
 
 INSTRUCTIONS:
 1. Carefully analyze the position considering:
@@ -175,41 +176,50 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         self.generation_params["max_completion_tokens"] = max_tokens
         
         # Prompt template
+        self.jinja_env = Environment(
+            loader=BaseLoader(),
+            autoescape=False,
+            trim_blocks=False,
+            lstrip_blocks=False,
+        )
         self.prompt_template = prompt_template or self.DEFAULT_PROMPT_TEMPLATE
+        self._compile_template()
         
         # Validate prompt template has required placeholders
         self._validate_prompt_template()
     
+    def _compile_template(self):
+        """
+        Compile the prompt template string into a Jinja2 Template object.
+        
+        Raises:
+            ValueError: If the template has invalid Jinja2 syntax.
+        """
+        try:
+            self.prompt_template_obj = self.jinja_env.from_string(self.prompt_template)
+        except TemplateError as e:
+            raise ValueError(f"Invalid Jinja2 template syntax: {e}") from e
+    
     def _validate_prompt_template(self):
-        """Validate that the prompt template is valid and contains at least basic placeholders."""
+        """
+        Validate that the prompt template is valid Jinja2 and warn about unknown variables.
+        
+        This method:
+        - Ensures the template is a non-empty string
+        - Parses the template to extract referenced variables
+        - Warns (but does not fail) if unknown variables are used
+        """
+
         # Check for basic template validity
         if not self.prompt_template or not isinstance(self.prompt_template, str):
             raise ValueError("Prompt template must be a non-empty string")
         
-        # Check for at least one placeholder to ensure it's a template
-        if "{" not in self.prompt_template or "}" not in self.prompt_template:
-            raise ValueError("Prompt template must contain at least one placeholder (e.g., {FEN})")
-        
-        # Check for balanced braces
-        open_braces = self.prompt_template.count("{")
-        close_braces = self.prompt_template.count("}")
-        if open_braces != close_braces:
-            raise ValueError("Prompt template has unbalanced braces - check for missing { or }")
-        
-        # Optional: Check for common issues with placeholder syntax
-        import re
-        placeholder_pattern = r'\{[^}]*\}'
-        placeholders = re.findall(placeholder_pattern, self.prompt_template)
-        
-        # Warn about potentially problematic placeholders (but don't fail)
-        for placeholder in placeholders:
-            if placeholder in ["{}", "{ }", "{  }"]:
-                print(f"Warning: Empty placeholder '{placeholder}' found in template")
-        
-        # Note: We don't require specific placeholders anymore - users can create custom templates
-        # with only the variables they need
-    
-
+        # Parse the template to extract undeclared variables
+        try:
+            ast = self.jinja_env.parse(self.prompt_template)
+            vars_in_template = meta.find_undeclared_variables(ast)
+        except TemplateError as e:
+            raise ValueError(f"Invalid Jinja2 template: {e}") from e
     
     def _build_prompt_context(
         self,
@@ -333,8 +343,8 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         
         # Format the prompt safely, handling missing placeholders
         try:
-            prompt = self.prompt_template.format(**context)
-        except KeyError as e:
+            prompt = self.prompt_template_obj.render(**context)
+        except TemplateError as e:
             # Handle missing placeholders gracefully
             missing_key = str(e).strip("'")
             print(f"Warning: Prompt template references placeholder '{missing_key}' that is not available")
@@ -342,15 +352,15 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
             print("Consider updating your template or using the default template")
             
             # Fall back to a minimal template that should always work
-            fallback_template = """You are playing chess. Choose the best move from the available legal moves.
+            fallback_template = f"""You are playing chess. Choose the best move from the available legal moves.
 
-Legal moves: {legal_moves_uci}
+Legal moves: {{ legal_moves_uci }}
 
 Respond with your move in UCI notation wrapped in <uci_move></uci_move> tags.
 
 Example: <uci_move>e2e4</uci_move>"""
-            
-            prompt = fallback_template.format(legal_moves_uci=context["legal_moves_uci"])
+            template = self.jinja_env.from_string(fallback_template)
+            prompt = template.render(**context)
         
         return prompt
     
