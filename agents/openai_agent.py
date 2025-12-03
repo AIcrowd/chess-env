@@ -101,7 +101,7 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         timeout: Optional[float] = None,
         retry_attempts: int = 3,
         retry_delay: float = 1.0,
-        fallback_behavior: str = "random_move",
+        fallback_behavior: str = "resign",
         **kwargs
     ):
         """
