@@ -438,9 +438,9 @@ Example: <uci_move>e2e4</uci_move>"""
             Exception: If API call fails after all retry attempts
         """
         last_error = None
-        request = {"messages": [{"role": "user", "content": prompt}]}
+        request = [{"role": "user", "content": prompt}]
         reqresp_log = {
-            "messages": request["messages"],
+            "messages": request,
             "model": self.model,
             "generation_params": self.generation_params,
             "timeout": self.timeout,
