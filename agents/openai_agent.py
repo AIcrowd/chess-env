@@ -5,9 +5,11 @@ This agent uses OpenAI's API to make chess moves based on the current board stat
 It follows the SPEC requirements for prompt templates and move parsing.
 """
 
+import json
 import os
 import time
 from typing import Any, Dict, List, Optional
+import uuid
 
 import openai
 from dotenv import load_dotenv
@@ -102,6 +104,7 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
         retry_attempts: int = 3,
         retry_delay: float = 1.0,
         fallback_behavior: str = "resign",
+        request_response_log_file: Optional[str] = None,
         **kwargs
     ):
         """
@@ -117,6 +120,7 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
             retry_attempts: Number of retry attempts for failed API calls
             retry_delay: Delay between retry attempts in seconds
             fallback_behavior: What to do when no valid move is found ("random_move" or "resign")
+            request_response_log_file: File to log request and response to
             **kwargs: Additional OpenAI API parameters
         """
         # Set up OpenAI client
@@ -128,6 +132,7 @@ Remember: Always use UCI notation and wrap your response in <uci_move></uci_move
             )
         
         self.client = openai.OpenAI(api_key=self.api_key)
+        self.request_response_log_file = request_response_log_file
         
         # Load configuration from environment variables if not provided
         self.model = model or os.environ.get("OPENAI_MODEL", "gpt-5")
@@ -423,17 +428,28 @@ Example: <uci_move>e2e4</uci_move>"""
             Exception: If API call fails after all retry attempts
         """
         last_error = None
+        request = {"messages": [{"role": "user", "content": prompt}]}
+        reqresp_log = {
+            "messages": request["messages"],
+            "model": self.model,
+            "generation_params": self.generation_params,
+            "timeout": self.timeout,
+            "request_id": str(uuid.uuid4()),
+            "timestamp": time.time(),
+        }
         
         for attempt in range(self.retry_attempts):
             try:
                 response = self.client.chat.completions.create(
                     model=self.model,
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ],
+                    messages=request,
                     **self.generation_params,
                     timeout=self.timeout
                 )
+
+                reqresp_log["response"] = response.model_dump()
+                reqresp_log["duration"] = time.time() - reqresp_log["timestamp"]
+                self._log_request_response(reqresp_log)
                 
                 # Extract the response content
                 if response.choices and response.choices[0].message:
@@ -455,6 +471,16 @@ Example: <uci_move>e2e4</uci_move>"""
         # If we get here, all retry attempts failed
         raise Exception(f"OpenAI API call failed after {self.retry_attempts} attempts: {last_error}")
     
+
+    def _log_request_response(self, reqresp_log: Dict[str, Any]):
+        """
+        Log the request and response to the request response log file.
+        """
+        if self.request_response_log_file:
+            with open(self.request_response_log_file, "a") as f:
+                json.dump(reqresp_log, f)
+                f.write("\n")
+        
     def _parse_move(self, response: str, legal_moves: List[chess.Move], board: chess.Board) -> chess.Move:
         """
         Parse the model's response to extract a valid move.
