@@ -446,6 +446,7 @@ Example: <uci_move>e2e4</uci_move>"""
             "timeout": self.timeout,
             "request_id": str(uuid.uuid4()),
             "timestamp": time.time(),
+            "error": None,
         }
         
         for attempt in range(self.retry_attempts):
@@ -479,6 +480,8 @@ Example: <uci_move>e2e4</uci_move>"""
                     break
         
         # If we get here, all retry attempts failed
+        reqresp_log["error"] = str(last_error)
+        self._log_request_response(reqresp_log)
         raise Exception(f"OpenAI API call failed after {self.retry_attempts} attempts: {last_error}")
     
 
@@ -591,8 +594,10 @@ Example: <uci_move>e2e4</uci_move>"""
             response = self._call_openai_api(prompt)
         except Exception as e:
             # If API call fails, fall back to first legal move
-            print(f"Warning: OpenAI API call failed: {e}, using first legal move")
-            return legal_moves[0], f"FALLBACK MOVE - OpenAI API failed: {e}"
+            # print(f"Warning: OpenAI API call failed: {e}, using first legal move")
+            # return legal_moves[0], f"FALLBACK MOVE - OpenAI API failed: {e}"
+            return None, f"RESIGNATION - Model failed to respond."
+
         
         # Parse the response to get the move
         try:
