@@ -44,6 +44,8 @@ class ChessEnvironment:
         self.black_illegal_attempts = 0
         self.white_move_attempts = 0
         self.black_move_attempts = 0
+        # Track last game termination reason for PGN metadata
+        self._last_game_termination: Optional[str] = None
         
         # Set initial position if provided
         if initial_fen is not None:
@@ -67,6 +69,8 @@ class ChessEnvironment:
         self.black_illegal_attempts = 0
         self.white_move_attempts = 0
         self.black_move_attempts = 0
+        # Clear last termination when starting fresh
+        self._last_game_termination = None
 
     def get_legal_moves(self) -> List[chess.Move]:
         """Get all legal moves for the current position."""
@@ -252,6 +256,7 @@ class ChessEnvironment:
         """
         self.reset()
         move_count = 0
+        termination_reason: Optional[str] = None
 
         if verbose:
             print(f"Starting new game: {self.agent1.__class__.__name__} (White) vs {self.agent2.__class__.__name__} (Black)")
@@ -266,6 +271,11 @@ class ChessEnvironment:
             current_side = self.get_side_to_move()
             current_agent = self.agent1 if current_side == "White" else self.agent2
 
+            # Snapshot illegal attempt counters so we can distinguish illegal moves
+            # from clean resignations or other failures to move.
+            prev_white_illegal = self.white_illegal_attempts
+            prev_black_illegal = self.black_illegal_attempts
+
             if verbose:
                 print(f"Move {move_count + 1}: {current_side}'s turn")
                 
@@ -279,11 +289,27 @@ class ChessEnvironment:
             # Get and play move
             move = self.play_agent_move(current_agent, current_side)
             if move is None:
-                # Agent failed to provide a valid move or resigned
+                # Agent failed to provide a valid move, resigned, or produced an illegal move.
+                # Distinguish illegal move attempts using the counters updated in play_agent_move.
                 if current_side == "White":
-                    result = "Black wins (White resigned)"
+                    illegal_increase = self.white_illegal_attempts > prev_white_illegal
                 else:
-                    result = "White wins (Black resigned)"
+                    illegal_increase = self.black_illegal_attempts > prev_black_illegal
+
+                if illegal_increase:
+                    termination_reason = "illegal"
+                    if current_side == "White":
+                        result = "Black wins (White illegal move)"
+                    else:
+                        result = "White wins (Black illegal move)"
+                else:
+                    # Treat as resignation / generic failure to provide a move
+                    termination_reason = "resignation"
+                    if current_side == "White":
+                        result = "Black wins (White resigned)"
+                    else:
+                        result = "White wins (Black resigned)"
+
                 if verbose:
                     print(f"❌ {current_side} failed to provide a valid move. {result}")
                 break
@@ -317,7 +343,22 @@ class ChessEnvironment:
         if 'result' not in locals():
             result = self.get_game_result()
             if result is None:
+                # Loop exited without a terminal board state: max move cap
                 result = "Draw (max moves reached)"
+                if termination_reason is None:
+                    termination_reason = "max_moves"
+
+        # If we still don't have an explicit termination reason, derive it from the board.
+        if termination_reason is None:
+            if self.is_game_over():
+                # Use detailed chess termination (checkmate, stalemate, etc.)
+                termination_reason = self.get_game_termination_reason()
+            else:
+                # Not a terminal board, so the only remaining explanation is max-move cap
+                termination_reason = "max_moves"
+
+        # Persist termination for later PGN generation
+        self._last_game_termination = termination_reason
 
         if verbose:
             print(f"\n🎯 Game Over: {result}")
@@ -344,9 +385,7 @@ class ChessEnvironment:
             "final_fen": self.get_fen(),
             "white_agent": self.agent1.__class__.__name__,
             "black_agent": self.agent2.__class__.__name__,
-            "game_over_reason": (
-                self.get_game_termination_reason() if self.is_game_over() else "max_moves"
-            ),
+            "game_over_reason": termination_reason,
             # Illegal move attempt statistics
             "white_illegal_attempts": self.white_illegal_attempts,
             "black_illegal_attempts": self.black_illegal_attempts,
@@ -540,6 +579,11 @@ class ChessEnvironment:
     
     def _get_termination_reason(self) -> str:
         """Get termination reason for PGN."""
+        # Prefer an explicit termination reason set by play_game (e.g. resignation/illegal)
+        last_reason = getattr(self, "_last_game_termination", None)
+        if last_reason:
+            return last_reason
+
         if not self.is_game_over():
             return "unterminated"
         
