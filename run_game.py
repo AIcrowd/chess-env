@@ -41,6 +41,7 @@ from rich.table import Table
 
 from agents import HuggingFaceAgent, OpenAIAgent, StockfishAgent
 from env import ChessEnvironment
+from metrics import apply_resignation_cpl_adjustment
 
 
 @dataclass
@@ -495,6 +496,9 @@ def play_single_game(
                 "white_acpl": 0.0,
                 "black_acpl": 0.0,
             }
+
+        # Apply resignation CPL adjustment: treat resignation as +1 move with CPL=1000 for the resigning side
+        analysis = apply_resignation_cpl_adjustment(analysis, result, penalty=1000.0)
 
         # Create game result
         game_result = GameResult(

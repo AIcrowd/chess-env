@@ -257,6 +257,8 @@ class ChessEnvironment:
         self.reset()
         move_count = 0
         termination_reason: Optional[str] = None
+        resigned_side: Optional[str] = None
+        starting_turn_white = chess.Board(self._initial_fen).turn
 
         if verbose:
             print(f"Starting new game: {self.agent1.__class__.__name__} (White) vs {self.agent2.__class__.__name__} (Black)")
@@ -305,6 +307,7 @@ class ChessEnvironment:
                 else:
                     # Treat as resignation / generic failure to provide a move
                     termination_reason = "resignation"
+                    resigned_side = current_side
                     if current_side == "White":
                         result = "Black wins (White resigned)"
                     else:
@@ -383,9 +386,12 @@ class ChessEnvironment:
             "move_history": self.move_history.copy(),
             "move_comments": self.move_comments.copy(),
             "final_fen": self.get_fen(),
+            "initial_fen": self._initial_fen,
+            "starting_turn_white": starting_turn_white,
             "white_agent": self.agent1.__class__.__name__,
             "black_agent": self.agent2.__class__.__name__,
             "game_over_reason": termination_reason,
+            "resigned_side": resigned_side,
             # Illegal move attempt statistics
             "white_illegal_attempts": self.white_illegal_attempts,
             "black_illegal_attempts": self.black_illegal_attempts,
